@@ -1,0 +1,18 @@
+Package: fdatractography
+Type: Package
+Title: Functional Data Analysis for Tractography in R
+Version: 0.0.0.9000
+Author: as.person(c(
+    "Aymeric Stamm <aymeric@stamm.fr> [aut, cre]"
+    ))
+Maintainer: Aymeric Stamm <aymeric@stamm.fr>
+Description: Functional data analysis of tractograms in R. It turns streamlines 
+    reconstructed from diffusion magnetic resonance images into proper 
+    functional data. It includes functional data analysis tools for 
+    statistically comparing groups of streamlines.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Imports:
+    tidyverse
+RoxygenNote: 6.0.1
