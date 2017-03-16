@@ -47,14 +47,17 @@ as_tract <- function(list, validate = TRUE) {
     if (!is.list(list))
       stop("The input object should be a list.")
 
-    if (!all(c("name", "pid", "side", "data") %in% vars))
-      stop("Input list should contain fields name, pid, side and data.")
+    if (!all(c("name", "case", "scan", "side", "data") %in% vars))
+      stop("Input list should contain fields name, case, scan, side and data.")
 
     if (!is.character(list$name) | length(list$name) != 1L)
-      stop("The name fieled should be a character vector of length 1.")
+      stop("The name field should be a character vector of length 1.")
 
-    if (!is.character(list$pid) | length(list$pid) != 1L)
-      stop("The pid field should be a character vector of length 1.")
+    if (!is.character(list$case) | length(list$case) != 1L)
+      stop("The case field should be a character vector of length 1.")
+
+    if (!is.character(list$scan) | length(list$scan) != 1L)
+      stop("The scan field should be a character vector of length 1.")
 
     if (!is.character(list$side) | length(list$side) != 1L)
       stop("The side field should be a character vector of length 1.")
@@ -75,7 +78,8 @@ as_tract <- function(list, validate = TRUE) {
       stop("The data field should only contain streamline objects.")
   }
 
-  res <- list(name = list$name, pid = list$pid, side = list$side, data = list$data)
+  res <- list(name = list$name, case = list$case, scan = list$scan,
+              side = list$side, data = list$data)
 
   class(res) <- c("tract", class(res))
 
@@ -124,25 +128,45 @@ read_tract <- function(path) {
     stringr::str_replace(".csv", "") %>%
     stringr::str_split("_")
 
-  name <- filename %>% purrr::map_chr(2L)
-  pid <- filename %>% purrr::map_chr(1L)
-  side <- filename %>% purrr::map_chr(3L)
+  n <- purrr::map_int(filename, length)
+  if (n < 3L || n > 4L)
+    stop("The CSV file name should contain 3 or 4 fields separated by '_'")
+
+  tract_name <- purrr::map_chr(filename, 3L)
+  case <- purrr::map_chr(filename, 1L)
+  scan <- purrr::map_chr(filename, 2L)
+  side <- NA_character_
+  if (n == 4L)
+    side <- purrr::map_chr(filename, 4L)
 
   data <- readr::read_csv(path)
 
   if (nrow(data) == 0)
-    return(tract(name = name, pid = pid, side = side, data = list()))
+    return(tract(name = tract_name, case = case, scan = scan, side = side, data = list()))
 
-  if (!all(c("LineID", "LPointID", "X", "Y", "Z") %in% names(data)))
-    stop("The data tibble should contain at least the variables Side, LineID, LPointID, X, Y and Z.")
+  required_vars <- c(
+    "LineID", "LPointID", "X", "Y", "Z",
+    "Tensors#0", "Tensors#1", "Tensors#2", "Tensors#3", "Tensors#4", "Tensors#5"
+  )
+  if (!all(required_vars %in% names(data)))
+    stop("The data tibble should contain at least the variables LineID, LPointID,
+         X, Y, Z and the 6 unique components of the diffusion tensor in each
+         point.")
 
   data <- data %>%
     dplyr::arrange(LineID, LPointID) %>%
+    dplyr::mutate(
+      Tensors = purrr::pmap(list(`Tensors#0`, `Tensors#1`, `Tensors#2`,
+                                `Tensors#3`,`Tensors#4`, `Tensors#5`), c) %>%
+        purrr::map(as_tensor)
+    ) %>%
+    dplyr::select(-dplyr::starts_with("Tensors#")) %>%
     dplyr::group_by(LineID) %>%
-    dplyr::do(streamlines = streamline(x = .$X, y = .$Y, z = .$Z)) %>%
+    dplyr::do(streamlines = streamline(x = .$X, y = .$Y, z = .$Z, dt = .$Tensors)) %>%
     dplyr::ungroup()
 
-  tract(name = name, pid = pid, side = side, data = data$streamlines)
+  tract(name = tract_name, case = case, scan = scan, side = side,
+        data = data$streamlines)
 }
 
 #' Tract Writer

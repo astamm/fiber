@@ -53,10 +53,11 @@ as_streamline <- function(input, validate = TRUE, ...) {
         .funs = dplyr::funs(. - lag(.))
       ) %>%
       tidyr::replace_na(list(dx = 0, dy = 0, dz = 0)) %>%
-      dplyr::mutate(norm = sqrt(dx^2 + dy^2 + dz^2), s = cumsum(norm))
+      dplyr::mutate(norm = sqrt(dx^2 + dy^2 + dz^2), s = cumsum(norm)) %>%
+      dplyr::select(-dx, -dy, -dz, -norm)
   }
 
-  input <- input %>% dplyr::select(s, x, y, z)
+  input <- input %>% dplyr::select(s, x, y, z, dplyr::everything())
 
   class(input) <- c("streamline", class(input))
 
