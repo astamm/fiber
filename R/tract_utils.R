@@ -218,7 +218,7 @@ plot_tract <- function(tract) {
   if (is_tract(tract))
     tract <- tibble::as_tibble(tract)
   else if (tibble::is_tibble(tract)) {
-    if (!all(c("name", "pid", "side", "data") %in% names(tract)))
+    if (!all(c("name", "case", "scan", "side", "data") %in% names(tract)))
       stop("The input tibble does not contain all the required fields.")
   } else
     stop("Input object is neither of class tract nor of class tibble.")
@@ -227,8 +227,8 @@ plot_tract <- function(tract) {
   if (length(name) > 1L)
     stop("It is not possible to simulaneously plot different tracts.")
 
-  pid <- unique(tract$pid)
-  if (length(name) > 1L)
+  case <- unique(tract$case)
+  if (length(case) > 1L)
     stop("It is not possible to simulaneously plot a tract for different subjects.")
 
   print(
@@ -238,7 +238,7 @@ plot_tract <- function(tract) {
       ggplot2::ggplot(ggplot2::aes(
         x = s,
         y = CoordVal,
-        col = side,
+        col = scan,
         fill = LineID
       )) +
       ggplot2::geom_line(size = 0.5, alpha = 0.3) +
@@ -248,7 +248,7 @@ plot_tract <- function(tract) {
       ggplot2::ylab("Coordinate (mm)") +
       ggplot2::guides(fill = FALSE) +
       ggplot2::theme(legend.position = "top") +
-      ggplot2::ggtitle(paste(name, "of Subject", pid))
+      ggplot2::ggtitle(paste(name, "of Subject", case))
   )
 
   invisible(tract)
