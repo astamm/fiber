@@ -13,8 +13,9 @@ tract_(xs)
 \item{...}{A set of name-value pairs. Arguments are evaluated sequentially,
 so you can refer to previously created variables. To be a valid tract, the
 set should contain at least the fields \code{name} with the name of the
-tract, \code{pid} with the identifier of the subject to which the tract
-belongs, \code{side} with the hemisphere to which the tract belongs and
+tract, \code{case} with the identifier of the subject to which the tract
+belongs, \code{scan} to identify repeated measures for the same subject,
+\code{side} with the hemisphere to which the tract belongs and
 \code{data} with the list of \code{streamline}s composing the tract.}
 }
 \value{
@@ -24,5 +25,6 @@ A \code{\link{tract}}.
 \code{tract} is the constructor for objects of class \code{tract}.
 }
 \examples{
-tr <- tract(name = "CST", pid = "H018947", side = "Left", data = list())
+tr <- tract(name = "CST", case = "H018947", scan = "01", side = "L",
+  data = list())
 }

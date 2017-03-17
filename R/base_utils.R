@@ -77,3 +77,17 @@ get_mean_diffusivity <- function(tensor, validate = TRUE) {
 
   mean(diag(tensor))
 }
+
+add_diffusion_information <- function(data, model = "None") {
+  switch(
+    model,
+    None = data,
+    DTI = data %>%
+      dplyr::mutate(
+        Tensors = purrr::pmap(list(`Tensors#0`, `Tensors#1`, `Tensors#2`,
+                                   `Tensors#3`,`Tensors#4`, `Tensors#5`), c) %>%
+          purrr::map(as_tensor)
+      ) %>%
+      dplyr::select(-dplyr::starts_with("Tensors#"))
+  )
+}

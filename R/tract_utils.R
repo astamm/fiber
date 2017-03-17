@@ -5,15 +5,17 @@
 #' @param ... A set of name-value pairs. Arguments are evaluated sequentially,
 #'   so you can refer to previously created variables. To be a valid tract, the
 #'   set should contain at least the fields \code{name} with the name of the
-#'   tract, \code{pid} with the identifier of the subject to which the tract
-#'   belongs, \code{side} with the hemisphere to which the tract belongs and
+#'   tract, \code{case} with the identifier of the subject to which the tract
+#'   belongs, \code{scan} to identify repeated measures for the same subject,
+#'   \code{side} with the hemisphere to which the tract belongs and
 #'   \code{data} with the list of \code{streamline}s composing the tract.
 #'
 #' @return A \code{\link{tract}}.
 #' @export
 #'
 #' @examples
-#' tr <- tract(name = "CST", pid = "H018947", side = "Left", data = list())
+#' tr <- tract(name = "CST", case = "H018947", scan = "01", side = "L",
+#'   data = list())
 tract <- function(...) {
   as_tract(tibble::lst(...))
 }
@@ -142,27 +144,37 @@ read_tract <- function(path) {
   data <- readr::read_csv(path)
 
   if (nrow(data) == 0)
-    return(tract(name = tract_name, case = case, scan = scan, side = side, data = list()))
+    return(tract(
+      name = tract_name, case = case, scan = scan, side = side, data = list()
+    ))
 
-  required_vars <- c(
-    "LineID", "LPointID", "X", "Y", "Z",
-    "Tensors#0", "Tensors#1", "Tensors#2", "Tensors#3", "Tensors#4", "Tensors#5"
-  )
+  required_vars <- c("LineID", "LPointID", "X", "Y", "Z")
   if (!all(required_vars %in% names(data)))
-    stop("The data tibble should contain at least the variables LineID, LPointID,
-         X, Y, Z and the 6 unique components of the diffusion tensor in each
-         point.")
+    stop("The data tibble should contain at least the variables LineID,
+LPointID, X, Y, and Z.")
+
+  model <- "None"
+  check_dti <- data %>%
+    names() %>%
+    stringr::str_locate("Tensors#") %>%
+    tibble::as_tibble() %>%
+    tidyr::drop_na() %>%
+    nrow()
+  if (check_dti == 6L)
+    model <- "DTI"
 
   data <- data %>%
     dplyr::arrange(LineID, LPointID) %>%
-    dplyr::mutate(
-      Tensors = purrr::pmap(list(`Tensors#0`, `Tensors#1`, `Tensors#2`,
-                                `Tensors#3`,`Tensors#4`, `Tensors#5`), c) %>%
-        purrr::map(as_tensor)
-    ) %>%
-    dplyr::select(-dplyr::starts_with("Tensors#")) %>%
+    add_diffusion_information(model) %>%
     dplyr::group_by(LineID) %>%
-    dplyr::do(streamlines = streamline(x = .$X, y = .$Y, z = .$Z, dt = .$Tensors)) %>%
+    dplyr::do(streamlines = streamline(
+      x = .$X,
+      y = .$Y,
+      z = .$Z,
+      diffusion = switch(model,
+                         None = NA_real_,
+                         DTI = .$Tensors)
+    )) %>%
     dplyr::ungroup()
 
   tract(name = tract_name, case = case, scan = scan, side = side,
@@ -183,7 +195,8 @@ write_tract <- function(tract, folder) {
   if (!is_tract(tract))
     stop("The input object is not a tract.")
 
-  path <- stringr::str_c(tract$pid, tract$name, tract$side, sep = "_") %>%
+  path <-
+    stringr::str_c(tract$case, tract$scan, tract$name, tract$side, sep = "_") %>%
     stringr::str_c(folder, ., ".csv")
 
   data <- tract %>%
@@ -258,11 +271,12 @@ plot_tract <- function(tract) {
 #'
 #' @param ... A set of \code{\link{tract}}s.
 #'
-#' @return A \code{\link[tibble]{tibble}} with the following 4 variables:
-#'   \code{name} with the name of the tract, \code{pid} with the identifier of
-#'   the subject to which the tract belongs, \code{side} with the hemisphere to
-#'   which the tract belongs and \code{data} with the list of \code{streamline}s
-#'   composing the tract.
+#' @return A \code{\link[tibble]{tibble}} with the following 5 variables:
+#'   \code{name} with the name of the tract, \code{case} with the identifier of
+#'   the subject to which the tract belongs, \code{scan} with the identifier of
+#'   the repeated measure for a given subject, \code{side} with the hemisphere
+#'   to which the tract belongs and \code{data} with the list of
+#'   \code{streamline}s composing the tract.
 #' @export
 #'
 #' @examples
