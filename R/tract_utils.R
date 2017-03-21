@@ -335,3 +335,54 @@ reparametrize_tract <- function(tract, grid_length = NULL) {
 
   tract
 }
+
+#' Tract Hausdorff Distance
+#'
+#' @param tract A \code{\link{tract}}.
+#' @param grid_length An integer specifying the grid length for uniform resampling of the 3D coordinates (default: \code{50L}).
+#' @param ncores An integer specifying the number of cores available for the computations (default: \code{1L}).
+#' @param nobs An integer specifying how many random \code{\link{streamline}}s should be kept from the input tract (default: \code{10L}).
+#'
+#' @return A vector of size \code{nobs * (nobs - 1) / 2} storing optimally the matrix of Hausdorff distances between \code{\link{streamline}}s that were kept as part of the input \code{\link{tract}}.
+#' @export
+#'
+#' @examples
+#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
+#' cst_left <- read_tract(file)
+#' get_distance_vector(cst_left)
+get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10L) {
+  tmp <- tract %>%
+    reparametrize_tract(grid_length = grid_length) %>%
+    tibble::as_tibble() %>%
+    dplyr::sample_n(nobs)
+
+  parallel <- (ncores > 1L && requireNamespace("multidplyr", quietly = TRUE))
+  if (parallel)
+    cl <- multidplyr::create_cluster(cores = ncores) %>%
+      multidplyr::cluster_copy(get_hausdorff_distance)
+
+  tmp <- tidyr::crossing(
+    tmp %>% dplyr::select(str1 = data) %>% dplyr::mutate(id1 = seq_len(n())),
+    tmp %>% dplyr::select(str2 = data) %>% dplyr::mutate(id2 = seq_len(n()))
+  ) %>%
+    dplyr::filter(id2 > id1)
+
+  if (parallel) {
+    tmp <- tmp %>%
+      multidplyr::partition(cluster = cl) %>%
+      dplyr::mutate(
+        distances = purrr::map2_dbl(str1, str2, get_hausdorff_distance)
+      ) %>%
+      dplyr::collect() %>%
+      dplyr::ungroup() %>%
+      dplyr::arrange(id1, id2)
+  } else {
+    tmp <- tmp %>%
+      dplyr::mutate(
+        distances = purrr::map2_dbl(str1, str2, get_hausdorff_distance)
+      ) %>%
+      dplyr::arrange(id1, id2)
+  }
+
+  tmp$distances
+}

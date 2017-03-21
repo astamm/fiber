@@ -252,3 +252,39 @@ get_curvature_sd <- function(streamline, validate = TRUE, direction = NULL) {
   curvature <- get_curvature(streamline, FALSE, direction)
   sd(curvature$k)
 }
+
+#' Hausdorff distance between streamlines
+#'
+#' @param streamline1 A \code{\link{streamline}}.
+#' @param streamline2 A \code{\link{streamline}}.
+#'
+#' @return A scalar representing the Hausdorff distance between the two input
+#'   streamlines.
+#' @export
+#'
+#' @examples
+#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
+#' cst_left <- read_tract(file)
+#' tmp <- reparametrize_tract(cst_left, grid_length = 50L)
+#' str1 <- tmp$data[[1]]
+#' str2 <- tmp$data[[2]]
+#' get_hausdorff_distance(str1, str2)
+get_hausdorff_distance <- function(streamline1, streamline2) {
+  tmp <- streamline1 %>%
+    dplyr::mutate(
+      Points = purrr::pmap(list(x, y, z), c),
+      dist = purrr::map_dbl(Points, get_hausdorff_distance_internal, streamline2)
+    ) %>%
+    dplyr::summarise(dist = max(dist))
+  max_dist1 <- tmp$dist
+
+  tmp <- streamline2 %>%
+    dplyr::mutate(
+      Points = purrr::pmap(list(x, y, z), c),
+      dist = purrr::map_dbl(Points, get_hausdorff_distance_internal, streamline1)
+    ) %>%
+    dplyr::summarise(dist = max(dist))
+  max_dist2 <- tmp$dist
+
+  max(max_dist1, max_dist2)
+}
