@@ -4,7 +4,8 @@
 \alias{find_clusters}
 \title{Tract Clustering}
 \usage{
-find_clusters(distance_vector, k = 1L, max_iter = 100L, nstart = 100L)
+find_clusters(distance_vector, k = 1L, max_iter = 100L, nstart = 100L,
+  ncores = 1L)
 }
 \arguments{
 \item{k}{An integer specifying the number of clusters (default: \code{1L}).}
@@ -14,6 +15,8 @@ find_clusters(distance_vector, k = 1L, max_iter = 100L, nstart = 100L)
 
 \item{nstart}{An integer specifying the number of random initializations
 (default: \code{100L}).}
+
+\item{ncores}{An integer specifying the number of cores available for the computations (default: \code{1L}).}
 
 \item{distance_matrix}{A matrix of size \code{n x n} where \code{n} is the
 number of streamlines in the tract and each entry of the matrix evaluates

@@ -112,6 +112,7 @@ get_hausdorff_distance_internal <- function(point, streamline) {
 #'   (default: \code{100L}).
 #' @param nstart An integer specifying the number of random initializations
 #'   (default: \code{100L}).
+#' @param ncores An integer specifying the number of cores available for the computations (default: \code{1L}).
 #'
 #' @return A list with two components: \code{groups} gives membership of each
 #'   individual streamline while \code{centroids} gives the labels of the
@@ -123,11 +124,31 @@ get_hausdorff_distance_internal <- function(point, streamline) {
 #' D <- (D + t(D)) / 2
 #' diag(D) <- 0
 #' find_clusters(D, k = 4L)
-find_clusters <- function(distance_vector, k = 1L, max_iter = 100L, nstart = 100L) {
+find_clusters <- function(distance_vector, k = 1L, max_iter = 100L, nstart = 100L, ncores = 1L) {
   distance_matrix <- get_distance_matrix(distance_vector)
-  res <- list()
-  for (i in seq_len(nstart))
-    res[[i]] <- find_clusters_internal(distance_matrix, k, max_iter)
+  ncores <- min(ncores, nstart)
+  parallel <- (ncores > 1L && requireNamespace("multidplyr", quietly = TRUE))
+
+  if (parallel) {
+    cl <- multidplyr::create_cluster(cores = ncores) %>%
+      multidplyr::cluster_copy(find_clusters_internal) %>%
+      multidplyr::cluster_copy(distance_matrix) %>%
+      multidplyr::cluster_copy(k) %>%
+      multidplyr::cluster_copy(max_iter)
+    tmp <- tibble::tibble(id = seq_len(nstart)) %>%
+      multidplyr::partition(cluster = cl) %>%
+      dplyr::mutate(
+        res = purrr::map(id, ~ find_clusters_internal(distance_matrix, k, max_iter))
+      ) %>%
+      dplyr::collect() %>%
+      dplyr::ungroup() %>%
+      dplyr::arrange(id)
+    res <- tmp$res
+  } else {
+    res <- list()
+    for (i in seq_len(nstart))
+      res[[i]] <- find_clusters_internal(distance_matrix, k, max_iter)
+  }
   idx <- which.min(purrr::map_dbl(res, "wmse"))
   res[[idx]]
 }
@@ -179,6 +200,6 @@ get_distance_matrix <- function(distance_vector) {
     res[i, (i+1):n] <- distance_vector[offset + 1:(n-i)]
     offset <- offset + (n - i)
   }
-  res[lower.tri(res)] <- res[upper.tri(res)]
+  res[lower.tri(res)] <- t(res)[lower.tri(res)]
   res
 }
