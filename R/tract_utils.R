@@ -350,7 +350,7 @@ reparametrize_tract <- function(tract, grid_length = NULL) {
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
 #' get_distance_vector(cst_left)
-get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10L) {
+get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10L, distance_fun = get_L2_distance) {
   tmp <- tract %>%
     reparametrize_tract(grid_length = grid_length) %>%
     tibble::as_tibble() %>%
@@ -359,7 +359,7 @@ get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10
   parallel <- (ncores > 1L && requireNamespace("multidplyr", quietly = TRUE))
   if (parallel)
     cl <- multidplyr::create_cluster(cores = ncores) %>%
-      multidplyr::cluster_copy(get_hausdorff_distance)
+      multidplyr::cluster_copy(distance_fun)
 
   tmp <- tidyr::crossing(
     tmp %>% dplyr::select(str1 = data) %>% dplyr::mutate(id1 = seq_len(n())),
@@ -371,7 +371,7 @@ get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10
     tmp <- tmp %>%
       multidplyr::partition(cluster = cl) %>%
       dplyr::mutate(
-        distances = purrr::map2_dbl(str1, str2, get_hausdorff_distance)
+        distances = purrr::map2_dbl(str1, str2, distance_fun)
       ) %>%
       dplyr::collect() %>%
       dplyr::ungroup() %>%
@@ -379,7 +379,7 @@ get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10
   } else {
     tmp <- tmp %>%
       dplyr::mutate(
-        distances = purrr::map2_dbl(str1, str2, get_hausdorff_distance)
+        distances = purrr::map2_dbl(str1, str2, distance_fun)
       ) %>%
       dplyr::arrange(id1, id2)
   }

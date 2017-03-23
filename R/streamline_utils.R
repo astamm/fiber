@@ -253,15 +253,19 @@ get_curvature_sd <- function(streamline, validate = TRUE, direction = NULL) {
   sd(curvature$k)
 }
 
-#' Hausdorff distance between streamlines
+#' Distances Between Streamlines
+#'
+#' \code{get_hausdorff_distance} computes the Hausdorff distance between the two input
+#'   streamlines.
+#' \code{get_L2_distance} computes the L2 distance between the two input
+#'   streamlines.
 #'
 #' @param streamline1 A \code{\link{streamline}}.
 #' @param streamline2 A \code{\link{streamline}}.
 #'
-#' @return A scalar representing the Hausdorff distance between the two input
+#' @return A non-negative scalar representing the chosen distance between the two input
 #'   streamlines.
-#' @export
-#'
+#' @name get-distance
 #' @examples
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
@@ -269,6 +273,11 @@ get_curvature_sd <- function(streamline, validate = TRUE, direction = NULL) {
 #' str1 <- tmp$data[[1]]
 #' str2 <- tmp$data[[2]]
 #' get_hausdorff_distance(str1, str2)
+#' get_L2_distance(str1, str2)
+NULL
+
+#' @rdname get-distance
+#' @export
 get_hausdorff_distance <- function(streamline1, streamline2) {
   tmp <- streamline1 %>%
     dplyr::mutate(
@@ -287,4 +296,27 @@ get_hausdorff_distance <- function(streamline1, streamline2) {
   max_dist2 <- tmp$dist
 
   max(max_dist1, max_dist2)
+}
+
+#' @rdname get-distance
+#' @export
+get_L2_distance <- function(streamline1, streamline2) {
+  if (nrow(streamline1) > nrow(streamline2)) {
+    str <- streamline1
+    streamline1 <- streamline2
+    streamline2 <- str
+  }
+  xfun <- approxfun(streamline2$s, streamline2$x)
+  yfun <- approxfun(streamline2$s, streamline2$y)
+  zfun <- approxfun(streamline2$s, streamline2$z)
+  dil <- 1
+  opt <- optim(dil, cost, str = streamline1, xfun = xfun, yfun = yfun, zfun = zfun,
+               lower = 0, upper = 2, method = "L-BFGS-B")
+  opt$value
+}
+
+cost <- function(param, str, xfun, yfun, zfun) {
+  sqrt(mean((str$x - xfun(param[1] * str$s))^2  +
+             (str$y - yfun(param[1] * str$s))^2 +
+             (str$z - zfun(param[1] * str$s))^2, na.rm = TRUE))
 }

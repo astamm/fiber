@@ -4,7 +4,8 @@
 \alias{get_distance_vector}
 \title{Tract Hausdorff Distance}
 \usage{
-get_distance_vector(tract, grid_length = 50L, ncores = 1L, nobs = 10L)
+get_distance_vector(tract, grid_length = 50L, ncores = 1L, nobs = 10L,
+  distance_fun = get_L2_distance)
 }
 \arguments{
 \item{tract}{A \code{\link{tract}}.}
