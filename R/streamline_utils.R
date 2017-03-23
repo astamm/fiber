@@ -309,10 +309,9 @@ get_L2_distance <- function(streamline1, streamline2) {
   xfun <- approxfun(streamline2$s, streamline2$x)
   yfun <- approxfun(streamline2$s, streamline2$y)
   zfun <- approxfun(streamline2$s, streamline2$z)
-  dil <- 1
-  opt <- optim(dil, cost, str = streamline1, xfun = xfun, yfun = yfun, zfun = zfun,
-               lower = 0, upper = 2, method = "L-BFGS-B")
-  opt$value
+  opt <- optimize(cost, c(0, 2), str = streamline1,
+                  xfun = xfun, yfun = yfun, zfun = zfun)
+  opt$objective
 }
 
 cost <- function(param, str, xfun, yfun, zfun) {

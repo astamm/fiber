@@ -354,7 +354,7 @@ get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10
   tmp <- tract %>%
     reparametrize_tract(grid_length = grid_length) %>%
     tibble::as_tibble() %>%
-    dplyr::sample_n(nobs)
+    dplyr::slice(seq_len(nobs))
 
   parallel <- (ncores > 1L && requireNamespace("multidplyr", quietly = TRUE))
   if (parallel)
