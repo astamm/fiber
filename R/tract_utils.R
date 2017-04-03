@@ -227,7 +227,7 @@ write_tract <- function(tract, folder) {
 #' cst_right <- read_tract(file)
 #' cst <- bind_tracts(cst_left, cst_right)
 #' plot_tract(cst)
-plot_tract <- function(tract) {
+plot_tract <- function(tract, transparency = 1) {
   if (is_tract(tract))
     tract <- tibble::as_tibble(tract)
   else if (tibble::is_tibble(tract)) {
@@ -254,8 +254,8 @@ plot_tract <- function(tract) {
         col = scan,
         fill = LineID
       )) +
-      ggplot2::geom_line(size = 0.5, alpha = 0.3) +
-      ggplot2::facet_wrap(~CoordName, scales = "free") +
+      ggplot2::geom_line(size = 0.5, alpha = transparency) +
+      ggplot2::facet_wrap(~ CoordName, scales = "free", nrow = 3L) +
       ggplot2::theme_bw() +
       ggplot2::xlab("Arc Length (mm)") +
       ggplot2::ylab("Coordinate (mm)") +
@@ -336,6 +336,28 @@ reparametrize_tract <- function(tract, grid_length = NULL) {
   tract
 }
 
+reparametrize_tract2 <- function(tract, grid_length = NULL) {
+  if (is.null(grid_length)) {
+    grid_length <- tract$data %>%
+      purrr::map_int(nrow) %>%
+      mean() %>%
+      round()
+  }
+
+  abs <- seq(0, min(purrr::map_dbl(tract$data, get_curvilinear_length)),
+             length.out = grid_length)
+
+  tract$data <- tract$data %>%
+    purrr::map(dplyr::do, tibble::tibble(
+      s = abs,
+      x = approx(.$s, .$x, xout = s)$y,
+      y = approx(.$s, .$y, xout = s)$y,
+      z = approx(.$s, .$z, xout = s)$y
+    ) %>% as_streamline())
+
+  tract
+}
+
 #' Tract Hausdorff Distance
 #'
 #' @param tract A \code{\link{tract}}.
@@ -385,4 +407,163 @@ get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10
   }
 
   tmp$distances
+}
+
+align_tract <- function(tract) {
+  tract$data <- tract %>%
+    as_tibble() %>%
+    mutate(
+      size = map_dbl(data, get_curvilinear_length, validate = FALSE),
+      dilation = data %>%
+        map(align, fixed_streamline = data[[which.min(size)]]) %>%
+        map_dbl("minimum"),
+      data = data %>%
+        map2(dilation, ~ mutate(.x, s = s / .y)) %>%
+        map(as_streamline, validate = FALSE)
+    ) %>%
+    `$`(data)
+  tract
+}
+
+get_functional_representation <- function(tract, align = TRUE, validate = TRUE) {
+  if (validate) {
+    if (!is_tract(tract))
+      stop("Input is not a tract object.")
+  }
+
+  if (align) tract <- align_tract(tract)
+  mf_tract <- roahd::as.mfData(tract)
+  mbd_data <- roahd::multiMBD(mf_tract)
+  mbd_thrd <- max(mbd_data) *
+    optimize(depth_cost, c(0, 1), depth_data = mbd_data)$minimum
+  indices <- (mbd_data >= mbd_thrd)
+  xmat <- mf_tract$fDList[[1]]$values[indices, ]
+  ymat <- mf_tract$fDList[[2]]$values[indices, ]
+  zmat <- mf_tract$fDList[[3]]$values[indices, ]
+  volume <- 0
+  for (i in 1:mf_tract$P) {
+    data_points <- cbind(xmat[, i], ymat[, i], zmat[, i])
+    area <- geometry::convhulln(data_points, "FA")$area
+    volume <- volume + area
+  }
+  list(medoid_index = which.max(mbd_data), iqr = volume / (mf_tract$P - 1))
+}
+
+robust_clusterize <- function(tract, k = 1L, max_iter = 10L, nstart = 4L, ncores = 1L) {
+  ncores <- min(ncores, nstart)
+  parallel <- (ncores > 1L && requireNamespace("multidplyr", quietly = TRUE))
+
+  if (parallel) {
+    cl <- multidplyr::create_cluster(cores = ncores) %>%
+      multidplyr::cluster_copy(clusterize) %>%
+      multidplyr::cluster_copy(tract) %>%
+      multidplyr::cluster_copy(k) %>%
+      multidplyr::cluster_copy(max_iter)
+    tmp <- tibble::tibble(id = seq_len(nstart)) %>%
+      multidplyr::partition(cluster = cl) %>%
+      dplyr::mutate(
+        res = purrr::map(id, ~ clusterize(tract, k, max_iter))
+      ) %>%
+      dplyr::collect() %>%
+      dplyr::ungroup() %>%
+      dplyr::arrange(id)
+    res <- tmp$res
+  } else {
+    res <- list()
+    for (i in seq_len(nstart))
+      res[[i]] <- clusterize(tract, k, max_iter)
+  }
+  idx <- which.min(purrr::map_dbl(res, "wmse"))
+  res[[idx]]
+}
+
+clusterize <- function(tract, k = 1L, max_iter = 10L, align = TRUE, validate = TRUE) {
+  if (validate) {
+    if (!is_tract(tract))
+      stop("Input should be a tract object.")
+  }
+
+  n <- length(tract$data)
+  labels <- seq_len(n)
+  centroids <- sample.int(n, k)
+  within <- rep(0, k)
+  final_wmse <- 0
+  for (iter in seq_len(max_iter)) {
+
+    # Some verbose display
+    str_iter <- formatC(
+      iter,
+      width = stringr::str_length(max_iter),
+      format = "d",
+      flag = "0"
+    )
+    print(paste0("Iteration ", str_iter, "/", max_iter, "."))
+
+    # Assign curves to clusters
+    groups <- labels %>%
+      purrr::map_int(function(idx) {
+        distances <- rep(0, k)
+        for (i in seq_len(k))
+          distances[i] <- get_L2_distance(
+            streamline1 = tract$data[[centroids[i]]],
+            streamline2 = tract$data[[idx]]
+          )
+        which.min(distances)
+      })
+
+    # Find new cluster centers
+    for (i in seq_len(k)) {
+      group <- (groups == i)
+      group_labels <- labels[group]
+      subtract <- tract
+      subtract$data <- subtract$data[group]
+      cluster_summary <- get_functional_representation(subtract, align, FALSE)
+      centroids[i] <- group_labels[cluster_summary$medoid_index]
+      within[i] <- cluster_summary$iqr
+    }
+
+    wmse <- mean(within)^2 + var(within)
+    if (wmse < final_wmse || iter == 1L) {
+      final_groups <- groups
+      final_centroids <- centroids
+      final_within <- within
+      final_wmse <- wmse
+    } else break
+  }
+  list(groups = final_groups, cendroids = final_centroids,
+       within = final_within, wmse = final_wmse)
+}
+
+as.mfData.tract <- function(x, ...) {
+  min_length <- min(map_dbl(x$data, get_curvilinear_length))
+  mean_nbpts <- round(mean(map_int(x$data, nrow)))
+  s <- seq(0, min_length, length.out = mean_nbpts)
+  cst_rep <- reparametrize_tract2(x, grid_length = mean_nbpts)
+  cst_rep <- cst_rep %>%
+    as_tibble() %>%
+    select(data) %>%
+    unnest(.id = "LineID") %>%
+    group_by(LineID) %>%
+    mutate(PointID = seq_len(n())) %>%
+    ungroup(LineID)
+
+  xmatrix <- cst_rep %>%
+    select(LineID, PointID, x) %>%
+    spread(PointID, x) %>%
+    select(-LineID) %>%
+    as.matrix()
+
+  ymatrix <- cst_rep %>%
+    select(LineID, PointID, y) %>%
+    spread(PointID, y) %>%
+    select(-LineID) %>%
+    as.matrix()
+
+  zmatrix <- cst_rep %>%
+    select(LineID, PointID, z) %>%
+    spread(PointID, z) %>%
+    select(-LineID) %>%
+    as.matrix()
+
+  roahd::mfData(s, list(xmatrix, ymatrix, zmatrix))
 }

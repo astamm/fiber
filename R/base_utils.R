@@ -203,3 +203,7 @@ get_distance_matrix <- function(distance_vector) {
   res[lower.tri(res)] <- t(res)[lower.tri(res)]
   res
 }
+
+depth_cost <- function(x, depth_data) {
+  (mean(depth_data >= x * max(depth_data)) - 0.5)^2
+}

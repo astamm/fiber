@@ -306,15 +306,19 @@ get_L2_distance <- function(streamline1, streamline2) {
     streamline1 <- streamline2
     streamline2 <- str
   }
-  xfun <- approxfun(streamline2$s, streamline2$x)
-  yfun <- approxfun(streamline2$s, streamline2$y)
-  zfun <- approxfun(streamline2$s, streamline2$z)
-  opt <- optimize(cost, c(0, 2), str = streamline1,
-                  xfun = xfun, yfun = yfun, zfun = zfun)
-  opt$objective
+  aln <- align(fixed_streamline = streamline1, moving_streamline = streamline2)
+  aln$objective
 }
 
-cost <- function(param, str, xfun, yfun, zfun) {
+align <- function(fixed_streamline, moving_streamline) {
+  xfun <- approxfun(moving_streamline$s, moving_streamline$x)
+  yfun <- approxfun(moving_streamline$s, moving_streamline$y)
+  zfun <- approxfun(moving_streamline$s, moving_streamline$z)
+  optimize(align_cost, c(0, 2), str = fixed_streamline,
+           xfun = xfun, yfun = yfun, zfun = zfun)
+}
+
+align_cost <- function(param, str, xfun, yfun, zfun) {
   sqrt(mean((str$x - xfun(param[1] * str$s))^2  +
              (str$y - yfun(param[1] * str$s))^2 +
              (str$z - zfun(param[1] * str$s))^2, na.rm = TRUE))
