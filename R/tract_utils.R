@@ -287,7 +287,6 @@ plot_tract <- function(tract, transparency = 1) {
 #' bind_tracts(cst_left, cst_right)
 bind_tracts <- function(...) {
   tract_list <- list(...)
-
   res <- NULL
 
   for (i in seq_along(tract_list)) {
@@ -303,57 +302,75 @@ bind_tracts <- function(...) {
 #' Tract Reparametrization
 #'
 #' @param tract A \code{\link{tract}}.
-#' @param grid_length Size of the grid for uniformly distributed curvilinear
-#'   abscissa (default: uses the mean grid size across streamlines composing the
-#'   tract).
+#' @param grid Uniform grid for the curvilinear abscissa (default: \code{0L}
+#'   which uses the average number of points across streamlines defining the
+#'   tract). Can be specificed either as an integer in which case the abscissa
+#'   range of each streamline is used and abscissa is uniformly resampled within
+#'   this range or as a numeric vector that will be taken as the new common
+#'   abscissa for all streamlines.
+#' @param validate A boolean specifying whether to check that first input is
+#'   indeed a \code{\link{tract}}. should be checked (default: \code{TRUE}).
 #'
-#' @return A \code{\link{tract}} with streamlines evaluated on the same uniform
-#'   grid.
+#' @return A \code{\link{tract}} reparametrized according to the input grid.
 #' @export
 #'
 #' @examples
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
-#' file <- system.file("extdata", "Case001_CST_Right.csv", package = "fdatractography")
-#' cst_right <- read_tract(file)
 #' reparametrize_tract(cst_left)
-reparametrize_tract <- function(tract, grid_length = NULL) {
-  if (is.null(grid_length)) {
-    grid_length <- tract$data %>%
+reparametrize_tract <- function(tract, grid = 0L, validate = TRUE) {
+  if (validate) {
+    if (!is_tract(tract))
+      stop("First input should be a tract object.")
+  }
+
+  UseMethod("reparametrize_tract", grid)
+}
+
+#' @export
+#' @rdname reparametrize_tract
+reparametrize_tract.integer <- function(tract, grid = 0L, validate = TRUE) {
+  if (grid == 0L) {
+    grid <- tract$data %>%
       purrr::map_int(nrow) %>%
       mean() %>%
       round()
   }
 
   tract$data <- tract$data %>%
-    purrr::map(dplyr::do, tibble::tibble(
-      s = modelr::seq_range(.$s, n = grid_length),
+    purrr::map(dplyr::do, streamline(
+      s = modelr::seq_range(.$s, n = grid),
       x = approx(.$s, .$x, xout = s)$y,
       y = approx(.$s, .$y, xout = s)$y,
-      z = approx(.$s, .$z, xout = s)$y
+      z = approx(.$s, .$z, xout = s)$y,
+      validate = FALSE
     ))
 
   tract
 }
 
-reparametrize_tract2 <- function(tract, grid_length = NULL) {
-  if (is.null(grid_length)) {
+#' @export
+#' @rdname reparametrize_tract
+reparametrize_tract.numeric <- function(tract, grid = numeric(), validate = TRUE) {
+  if (length(grid) == 0L) {
     grid_length <- tract$data %>%
       purrr::map_int(nrow) %>%
       mean() %>%
       round()
+    max_abs <- tract$data %>%
+      purrr::map_dbl(get_curvilinear_length) %>%
+      min()
+    grid <- seq(0, max_abs, length.out = grid_length)
   }
 
-  abs <- seq(0, min(purrr::map_dbl(tract$data, get_curvilinear_length)),
-             length.out = grid_length)
-
   tract$data <- tract$data %>%
-    purrr::map(dplyr::do, tibble::tibble(
-      s = abs,
+    purrr::map(dplyr::do, streamline(
+      s = grid,
       x = approx(.$s, .$x, xout = s)$y,
       y = approx(.$s, .$y, xout = s)$y,
-      z = approx(.$s, .$z, xout = s)$y
-    ) %>% as_streamline())
+      z = approx(.$s, .$z, xout = s)$y,
+      validate = FALSE
+    ))
 
   tract
 }
@@ -374,7 +391,7 @@ reparametrize_tract2 <- function(tract, grid_length = NULL) {
 #' get_distance_vector(cst_left)
 get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10L, distance_fun = get_L2_distance) {
   tmp <- tract %>%
-    reparametrize_tract(grid_length = grid_length) %>%
+    reparametrize_tract(grid = grid_length, validate = FALSE) %>%
     tibble::as_tibble() %>%
     dplyr::slice(seq_len(nobs))
 
@@ -410,43 +427,62 @@ get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10
 }
 
 align_tract <- function(tract) {
-  tract$data <- tract %>%
-    as_tibble() %>%
-    mutate(
-      size = map_dbl(data, get_curvilinear_length, validate = FALSE),
-      dilation = data %>%
-        map(align, fixed_streamline = data[[which.min(size)]]) %>%
-        map_dbl("minimum"),
-      data = data %>%
-        map2(dilation, ~ mutate(.x, s = s / .y)) %>%
-        map(as_streamline, validate = FALSE)
-    ) %>%
-    `$`(data)
+  min_index <- tract$data %>%
+    purrr::map_dbl(get_curvilinear_length, validate = FALSE) %>%
+    which.min()
+  shortest_streamline <- tract$data[[min_index]]
+
+  tract$data <- tract$data %>%
+    purrr::map(
+      align_streamline,
+      fixed_streamline = shortest_streamline,
+      cost_function = cost_L1
+    )
+
   tract
 }
 
-get_functional_representation <- function(tract, align = TRUE, validate = TRUE) {
-  if (validate) {
-    if (!is_tract(tract))
-      stop("Input is not a tract object.")
+#' Modified Band Depth for Tracts Objects
+#'
+#' This is a specialization of the \code{\link[roahd]{MBD}} function for
+#' \code{\link{tract}} objects.
+#'
+#' @param tract A \code{\link{tract}} object.
+#' @param validate A boolean that specifies whether the input format should be
+#'   checked (default: \code{TRUE}).
+#'
+#' @return A numeric vector of depths for each \code{\link{streamline}} of the
+#'   input \code{\link{tract}} object.
+#' @export
+#'
+#' @examples
+#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
+#' cst_left <- read_tract(file)
+#' MBD(cst_left)
+MBD.tract <- function(tract) {
+  tract %>%
+    align_tract() %>%
+    roahd::as.mfData() %>%
+    roahd::multiMBD()
+}
+
+MBD_relative.tract <- function(tract_target, tract_reference, mfData_reference) {
+  N_target <- length(tract_target$data)
+
+  tract <- tract_target %>%
+    bind_tracts(tract_reference) %>%
+    align_tract() %>%
+    roahd::as.mfData()
+
+  relative_depths <- rep(0, tract$L)
+
+  for (i in 1:tract$L) {
+    fd_target <- tract$fDList[[i]][1:N_target, ]
+    fd_reference <- tract$fDList[[i]][(N_target + 1):tract$N, ]
+    relative_depths[i] <- roahd::MBD_relative(fd_target, fd_reference)
   }
 
-  if (align) tract <- align_tract(tract)
-  mf_tract <- roahd::as.mfData(tract)
-  mbd_data <- roahd::multiMBD(mf_tract)
-  mbd_thrd <- max(mbd_data) *
-    optimize(depth_cost, c(0, 1), depth_data = mbd_data)$minimum
-  indices <- (mbd_data >= mbd_thrd)
-  xmat <- mf_tract$fDList[[1]]$values[indices, ]
-  ymat <- mf_tract$fDList[[2]]$values[indices, ]
-  zmat <- mf_tract$fDList[[3]]$values[indices, ]
-  volume <- 0
-  for (i in 1:mf_tract$P) {
-    data_points <- cbind(xmat[, i], ymat[, i], zmat[, i])
-    area <- geometry::convhulln(data_points, "FA")$area
-    volume <- volume + area
-  }
-  list(medoid_index = which.max(mbd_data), iqr = volume / (mf_tract$P - 1))
+  mean(relative_depths)
 }
 
 robust_clusterize <- function(tract, k = 1L, max_iter = 10L, nstart = 4L, ncores = 1L) {
@@ -477,7 +513,7 @@ robust_clusterize <- function(tract, k = 1L, max_iter = 10L, nstart = 4L, ncores
   res[[idx]]
 }
 
-clusterize <- function(tract, k = 1L, max_iter = 10L, align = TRUE, validate = TRUE) {
+clusterize <- function(tract, k = 1L, max_iter = 10L, validate = TRUE) {
   if (validate) {
     if (!is_tract(tract))
       stop("Input should be a tract object.")
@@ -486,8 +522,17 @@ clusterize <- function(tract, k = 1L, max_iter = 10L, align = TRUE, validate = T
   n <- length(tract$data)
   labels <- seq_len(n)
   centroids <- sample.int(n, k)
+  groups <- rep(0, n)
+  reverse_groups <- list()
+  for (i in seq_len(k)) {
+    reverse_groups[[i]] <- centroids[i]
+  }
+  depths <- rep(0, n)
   within <- rep(0, k)
   final_wmse <- 0
+
+  clustered_tract <- list()
+
   for (iter in seq_len(max_iter)) {
 
     # Some verbose display
@@ -497,73 +542,259 @@ clusterize <- function(tract, k = 1L, max_iter = 10L, align = TRUE, validate = T
       format = "d",
       flag = "0"
     )
-    print(paste0("Iteration ", str_iter, "/", max_iter, "."))
+    writeLines(paste0("- Iteration ", str_iter, "/", max_iter))
 
-    # Assign curves to clusters
-    groups <- labels %>%
-      purrr::map_int(function(idx) {
-        distances <- rep(0, k)
-        for (i in seq_len(k))
-          distances[i] <- get_L2_distance(
-            streamline1 = tract$data[[centroids[i]]],
-            streamline2 = tract$data[[idx]]
-          )
-        which.min(distances)
-      })
+    # # Assignment step: Phase 1 (corners)
+    # # Handle corner cases to have 2 elements per cluster to start with,
+    # # otherwise you cannot compute relative depths
+    # corners <- centroids %>%
+    #   purrr::map_int(function(idx) {
+    #     distances <- rep(0, n)
+    #     for (i in labels) {
+    #       if (i %in% centroids)
+    #         distances[i] <- 1e100
+    #       else
+    #         distances[i] <- get_L1_distance(tract$data[[i]], tract$data[[idx]])
+    #     }
+    #     which.min(distances)
+    #   })
+    # for (i in seq_len(k))
+    #   reverse_groups[[i]] <- c(reverse_groups[[i]], corners[i])
+    #
+    # # Assignment step: Phase 2 (normal assignment)
+    # for (i in labels) {
+    #   writeLines(paste0("  * Assignment Step: Label ", i))
+    #   skip_label <- FALSE
+    #   for (j in seq_len(k)) {
+    #     if (i %in% reverse_groups[[j]]) {
+    #       skip_label <- TRUE
+    #       break
+    #     }
+    #   }
+    #   if (skip_label) next
+    #   tract_target <- tract[i]
+    #   relative_depths <- rep(0, k)
+    #   for (j in seq_len(k)) {
+    #     group_labels <- reverse_groups[[j]]
+    #     tract_reference <- tract[group_labels]
+    #     relative_depths[j] <- roahd::MBD_relative(tract_target, tract_reference)
+    #   }
+    #   optimal_cluster <- which.max(relative_depths)
+    #   groups[i] <- optimal_cluster
+    #   reverse_groups[[optimal_cluster]] <- unique(c(reverse_groups[[optimal_cluster]], i))
+    # }
+
+    # Assignment step
+    # New attempt
+    if (iter == 1L) {
+      groups <- labels %>%
+        purrr::map_int(function(id) {
+          writeLines(paste0("  * Assignment Step: Label ", id))
+          distances <- rep(0, k)
+          for (i in seq_len(k))
+            distances[i] <- get_L1_distance(tract$data[[id]], tract$data[[centroids[i]]])
+          which.min(distances)
+        })
+    } else {
+      groups <- labels %>%
+        purrr::map_int(function(id) {
+          writeLines(paste0("  * Assignment Step: Label ", id))
+          relative_depths <- rep(0, k)
+          for (i in seq_len(k)) {
+            med <- roahd::median_mfData(clustered_tract[[i]])
+            median_streamline <- streamline(
+              s = seq(med$t0, med$tP, length.out = med$P),
+              x = med$fDList[[1]]$values[1, ],
+              y = med$fDList[[2]]$values[1, ],
+              z = med$fDList[[3]]$values[1, ]
+            )
+            current_streamline <- tract$data[[id]] %>%
+              align_streamline(
+                fixed_streamline = median_streamline,
+                cost_function = cost_L1
+              )
+            current_tract <- tract[id]
+            current_tract$data[[1]] <- current_streamline
+            current_tract <- current_tract %>%
+              reparametrize_tract(median_streamline$s, FALSE) %>%
+              roahd::as.mfData()
+            relative_depths[i] <- 0
+            for (j in seq_len(med$L)) {
+              fd_target <- current_tract$fDList[[j]]
+              fd_reference <- clustered_tract[[i]]$fDList[[j]]
+              relative_depths[i] <- relative_depths[i] +
+                roahd::MBD_relative(fd_target, fd_reference)
+            }
+          }
+          which.max(relative_depths)
+        })
+    }
+
+    for (i in seq_len(k))
+      reverse_groups[[i]] <- labels[groups == i]
 
     # Find new cluster centers
+    writeLines(paste0("Representation Step"))
     for (i in seq_len(k)) {
       group <- (groups == i)
       group_labels <- labels[group]
-      subtract <- tract
-      subtract$data <- subtract$data[group]
-      cluster_summary <- get_functional_representation(subtract, align, FALSE)
-      centroids[i] <- group_labels[cluster_summary$medoid_index]
-      within[i] <- cluster_summary$iqr
+      subtract <- tract[group_labels]
+      clustered_tract[[i]] <- subtract %>%
+        align_tract() %>%
+        roahd::as.mfData()
+      tmp_depths <- roahd::multiMBD(clustered_tract[[i]])
+      centroids[i] <- group_labels[which.max(tmp_depths)]
+      depths[group_labels] <- tmp_depths
+      within[i] <- max(tmp_depths)
     }
 
-    wmse <- mean(within)^2 + var(within)
-    if (wmse < final_wmse || iter == 1L) {
+    wmse <- mean(within)
+    print(paste0("WMSE: ", wmse))
+    if (wmse > final_wmse || iter == 1L) {
       final_groups <- groups
       final_centroids <- centroids
       final_within <- within
       final_wmse <- wmse
-    } else break
+      print(paste0("Final WMSE: ", final_wmse))
+    }
   }
   list(groups = final_groups, cendroids = final_centroids,
        within = final_within, wmse = final_wmse)
 }
 
-as.mfData.tract <- function(x, ...) {
-  min_length <- min(map_dbl(x$data, get_curvilinear_length))
-  mean_nbpts <- round(mean(map_int(x$data, nrow)))
-  s <- seq(0, min_length, length.out = mean_nbpts)
-  cst_rep <- reparametrize_tract2(x, grid_length = mean_nbpts)
-  cst_rep <- cst_rep %>%
-    as_tibble() %>%
-    select(data) %>%
-    unnest(.id = "LineID") %>%
-    group_by(LineID) %>%
-    mutate(PointID = seq_len(n())) %>%
-    ungroup(LineID)
+find_best_cluster <- function(idx, k, groups, labels, depths, tract) {
+  maximum_depths <- rep(0, k)
+  for (j in seq_len(k)) {
+    group <- (groups == j)
+    group_labels <- labels[group]
+    if (idx %in% group_labels) {
+      maximum_depths[j] <- max(depths[group_labels])
+      next
+    }
+    group_labels <- c(idx, group_labels)
+    subtract <- tract
+    subtract$data <- subtract$data[group_labels]
+    maximum_depths[j] <- max(MBD(subtract))
+  }
+  which.max(maximum_depths)
+}
 
-  xmatrix <- cst_rep %>%
-    select(LineID, PointID, x) %>%
-    spread(PointID, x) %>%
-    select(-LineID) %>%
+as.mfData.tract <- function(x, grid_length = NULL, ...) {
+  size <- min(purrr::map_dbl(x$data, get_curvilinear_length))
+
+  if (is.null(grid_length))
+    grid_length <- round(mean(purrr::map_int(x$data, nrow)))
+
+  s <- seq(0, size, length.out = grid_length)
+
+  tmp <- x %>%
+    reparametrize_tract(grid = s, validate = FALSE) %>%
+    tibble::as_tibble() %>%
+    dplyr::select(data) %>%
+    tidyr::unnest(.id = "LineID") %>%
+    dplyr::group_by(LineID) %>%
+    dplyr::mutate(PointID = seq_len(n())) %>%
+    dplyr::ungroup(LineID)
+
+  xmatrix <- tmp %>%
+    dplyr::select(LineID, PointID, x) %>%
+    tidyr::spread(PointID, x) %>%
+    dplyr::select(-LineID) %>%
     as.matrix()
 
-  ymatrix <- cst_rep %>%
-    select(LineID, PointID, y) %>%
-    spread(PointID, y) %>%
-    select(-LineID) %>%
+  ymatrix <- tmp %>%
+    dplyr::select(LineID, PointID, y) %>%
+    tidyr::spread(PointID, y) %>%
+    dplyr::select(-LineID) %>%
     as.matrix()
 
-  zmatrix <- cst_rep %>%
-    select(LineID, PointID, z) %>%
-    spread(PointID, z) %>%
-    select(-LineID) %>%
+  zmatrix <- tmp %>%
+    dplyr::select(LineID, PointID, z) %>%
+    tidyr::spread(PointID, z) %>%
+    dplyr::select(-LineID) %>%
     as.matrix()
 
   roahd::mfData(s, list(xmatrix, ymatrix, zmatrix))
+}
+
+#' Inter-Quartile Range for arbitrary datasets
+#'
+#' This is a generic function to compute the inter-quartile range of a dataset.
+#'
+#' @param x Either a numeric vector or a \code{\link{tract}}.
+#' @param na.rm A boolean for removing missing values (default: \code{FALSE}).
+#'   For numeric vector inputs only.
+#' @param type An integer selecting one of the many quantile algorithms, see
+#'   \code{\link[stats]{quantile}}. For numeric vector inputs only.
+#' @param validate A boolean that specifies whether the input format should be
+#'   checked (default: \code{TRUE}). For \code{\link{tract}} inputs only.
+#'
+#' @return A positive scalar representing the inter-quartile range of the input
+#'   dataset.
+#' @export
+#'
+#' @examples
+#' IQR(1:10)
+#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
+#' cst_left <- read_tract(file)
+#' IQR(cst_left)
+IQR <- function(x, ...) {
+  UseMethod("IQR", x)
+}
+
+#' @export
+#' @rdname IQR
+IQR.numeric <- stats::IQR
+
+#' @export
+#' @rdname IQR
+IQR.tract <- function(x, validate = TRUE) {
+  if (validate) {
+    if (!is_tract(x))
+      stop("Input should be a tract object.")
+  }
+  x <- x %>%
+    align_tract() %>%
+    roahd::as.mfData()
+  depths <- roahd::multiMBD(x)
+  depth_threshold <- max(depths) *
+    optimize(depth_cost, c(0, 1), depth_data = depths)$minimum
+  indices <- (depths >= depth_threshold)
+  xmat <- x$fDList[[1]]$values[indices, ]
+  ymat <- x$fDList[[2]]$values[indices, ]
+  zmat <- x$fDList[[3]]$values[indices, ]
+  volume <- 0
+  for (i in 1:x$P) {
+    points <- cbind(xmat[, i], ymat[, i], zmat[, i])
+    area <- geometry::convhulln(points, "FA")$area
+    volume <- volume + area
+  }
+  volume / (x$P - 1)
+}
+
+#' Subsetting operator for \code{\link{tract}} objects
+#'
+#' This method provides an easy and natural way to subset a tract
+#' stored in a \code{\link{tract}} object, without having to deal with the inner
+#' representation of the \code{\link{tract}} class.
+#'
+#' @param tract The input \code{\link{tract}}.
+#' @param i A valid expression to extract subtract with fewer streamlines (could be an integer, a numeric vector, of a logical vector).
+#'
+#' @return A \code{\link{tract}} with the selected streamlines only.
+#'
+#' @examples
+#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
+#' cst_left <- read_tract(file)
+#' t1 <- cst_left[1]
+#' t2 <- cst_left[1:2]
+#' n <- length(cst_left$data)
+#' selected_streamlines <- sample(c(TRUE, FALSE), n, replace = TRUE)
+#' t3 <- cst_left[selected_streamlines]
+#' @export
+"[.tract" <- function(tract, i) {
+  if (missing(i))
+    return(tract)
+  tract$data <- tract$data[i]
+  tract
 }

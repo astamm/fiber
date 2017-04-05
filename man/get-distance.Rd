@@ -4,11 +4,14 @@
 \alias{get-distance}
 \alias{get_hausdorff_distance}
 \alias{get_L2_distance}
+\alias{get_L1_distance}
 \title{Distances Between Streamlines}
 \usage{
 get_hausdorff_distance(streamline1, streamline2)
 
 get_L2_distance(streamline1, streamline2)
+
+get_L1_distance(streamline1, streamline2)
 }
 \arguments{
 \item{streamline1}{A \code{\link{streamline}}.}
@@ -33,4 +36,5 @@ str1 <- tmp$data[[1]]
 str2 <- tmp$data[[2]]
 get_hausdorff_distance(str1, str2)
 get_L2_distance(str1, str2)
+get_L1_distance(str1, str2)
 }

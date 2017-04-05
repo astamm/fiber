@@ -2,6 +2,10 @@
 #' @export
 dplyr::`%>%`
 
+#' @importFrom roahd MBD
+#' @export
+roahd::MBD
+
 #' Vector-To-Tensor Representation
 #'
 #' @param vector A vector of size 6 storing the 6 unique components of a tensor.
@@ -206,4 +210,16 @@ get_distance_matrix <- function(distance_vector) {
 
 depth_cost <- function(x, depth_data) {
   (mean(depth_data >= x * max(depth_data)) - 0.5)^2
+}
+
+cost_L2 <- function(param, str, xfun, yfun, zfun) {
+  sqrt(mean((str$x - xfun(param[1] * str$s))^2  +
+              (str$y - yfun(param[1] * str$s))^2 +
+              (str$z - zfun(param[1] * str$s))^2, na.rm = TRUE))
+}
+
+cost_L1 <- function(param, str, xfun, yfun, zfun) {
+  mean(abs(str$x - xfun(param[1] * str$s))  +
+         abs(str$y - yfun(param[1] * str$s)) +
+         abs(str$z - zfun(param[1] * str$s)), na.rm = TRUE)
 }

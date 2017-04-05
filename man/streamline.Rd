@@ -5,14 +5,17 @@
 \alias{streamline_}
 \title{Streamline Constructor}
 \usage{
-streamline(...)
+streamline(..., validate = TRUE)
 
-streamline_(xs)
+streamline_(xs, validate = TRUE)
 }
 \arguments{
 \item{...}{A set of name-value pairs. Arguments are evaluated sequentially,
 so you can refer to previously created variables. To be a valid tract, the
 set should contain at least the fields x, y, z.}
+
+\item{validate}{A boolean specifying whether the class of the input object
+should be checked (default: \code{TRUE}).}
 }
 \value{
 A \code{\link{streamline}}.
