@@ -16,6 +16,8 @@ LazyData: true
 Imports:
     tidyverse,
     roahd,
-    geometry
+    geometry,
+    rlang,
+    mclust
 RoxygenNote: 6.0.1
 Suggests: multidplyr

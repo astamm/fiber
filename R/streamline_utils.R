@@ -51,7 +51,7 @@ as_streamline <- function(input, validate = TRUE, ...) {
   if (!("s" %in% vars)) {
     input <- input %>%
       dplyr::mutate_at(
-        .cols = dplyr::vars(dx = x, dy = y, dz = z),
+        .vars = dplyr::vars(dx = x, dy = y, dz = z),
         .funs = dplyr::funs(. - lag(.))
       ) %>%
       tidyr::replace_na(list(dx = 0, dy = 0, dz = 0)) %>%
@@ -189,7 +189,7 @@ get_curvature <- function(streamline, validate = TRUE, direction = NULL) {
         z = approx(x = .$s, y = .$z, n = n)$y
       )) %>%
       dplyr::mutate_at(
-        .cols = dplyr::vars(d2x = x, d2y = y, d2z = z),
+        .vars = dplyr::vars(d2x = x, d2y = y, d2z = z),
         .funs = dplyr::funs(dplyr::lead(.) + dplyr::lag(.) - 2 * .)
       ) %>%
       dplyr::mutate(k = (n - 1) ^ 2 * sqrt(d2x ^ 2 + d2y ^ 2 + d2z ^ 2))

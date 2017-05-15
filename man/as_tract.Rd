@@ -2,15 +2,21 @@
 % Please edit documentation in R/tract_utils.R
 \name{as_tract}
 \alias{as_tract}
+\alias{as_tract.list}
+\alias{as_tract.mfData}
 \title{Tract Coercion}
 \usage{
-as_tract(list, validate = TRUE)
+as_tract(input, ...)
+
+\method{as_tract}{list}(input, validate = TRUE, ...)
+
+\method{as_tract}{mfData}(input, metadata, ...)
 }
 \arguments{
-\item{list}{Input list.}
-
 \item{validate}{A boolean specifying whether the class of the input object
 should be checked (default: \code{TRUE}).}
+
+\item{list}{Input list.}
 }
 \value{
 A \code{\link{tract}}.

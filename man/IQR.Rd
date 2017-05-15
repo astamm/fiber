@@ -3,14 +3,14 @@
 \name{IQR}
 \alias{IQR}
 \alias{IQR.numeric}
-\alias{IQR.tract}
+\alias{IQR.mfData}
 \title{Inter-Quartile Range for arbitrary datasets}
 \usage{
 IQR(x, ...)
 
 \method{IQR}{numeric}(x, na.rm = FALSE, type = 7)
 
-\method{IQR}{tract}(x, validate = TRUE)
+\method{IQR}{mfData}(x, ...)
 }
 \arguments{
 \item{x}{Either a numeric vector or a \code{\link{tract}}.}

@@ -41,36 +41,42 @@ tract_ <- function(xs) {
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
 #' tr <- as_tract(cst_left)
-as_tract <- function(list, validate = TRUE) {
-  vars <- stringr::str_to_lower(names(list))
-  names(list) <- vars
+as_tract <- function(input, ...) {
+  UseMethod("as_tract", input)
+}
+
+#' @export
+#' @rdname as_tract
+as_tract.list <- function(input, validate = TRUE, ...) {
+  vars <- stringr::str_to_lower(names(input))
+  names(input) <- vars
 
   if (validate) {
-    if (!is.list(list))
+    if (!is.list(input))
       stop("The input object should be a list.")
 
     if (!all(c("name", "case", "scan", "side", "data") %in% vars))
       stop("Input list should contain fields name, case, scan, side and data.")
 
-    if (!is.character(list$name) | length(list$name) != 1L)
+    if (!is.character(input$name) | length(input$name) != 1L)
       stop("The name field should be a character vector of length 1.")
 
-    if (!is.character(list$case) | length(list$case) != 1L)
+    if (!is.character(input$case) | length(input$case) != 1L)
       stop("The case field should be a character vector of length 1.")
 
-    if (!is.character(list$scan) | length(list$scan) != 1L)
+    if (!is.character(input$scan) | length(input$scan) != 1L)
       stop("The scan field should be a character vector of length 1.")
 
-    if (!is.character(list$side) | length(list$side) != 1L)
+    if (!is.character(input$side) | length(input$side) != 1L)
       stop("The side field should be a character vector of length 1.")
 
-    data_ok <- is.list(list$data)
+    data_ok <- is.list(input$data)
 
     if (!data_ok)
       stop("The data field should be a list.")
 
-    for (i in seq_along(list$data)) {
-      if (!is_streamline(list$data[[i]])) {
+    for (i in seq_along(input$data)) {
+      if (!is_streamline(input$data[[i]])) {
         data_ok <- FALSE
         break
       }
@@ -80,12 +86,31 @@ as_tract <- function(list, validate = TRUE) {
       stop("The data field should only contain streamline objects.")
   }
 
-  res <- list(name = list$name, case = list$case, scan = list$scan,
-              side = list$side, data = list$data)
+  res <- list(
+    name = input$name,
+    case = input$case,
+    scan = input$scan,
+    side = input$side,
+    data = input$data
+  )
 
   class(res) <- c("tract", class(res))
 
   res
+}
+
+#' @export
+#' @rdname as_tract
+as_tract.mfData <- function(input, metadata, ...) {
+  s <- seq(input$t0, input$tP, length.out = input$P)
+  metadata$data <- seq_len(input$N) %>%
+    purrr::map(~ streamline(
+      s = s,
+      x = as.numeric(input$fDList[[1]]$values[., ]),
+      y = as.numeric(input$fDList[[2]]$values[., ]),
+      z = as.numeric(input$fDList[[3]]$values[., ])
+    ))
+  as_tract(metadata)
 }
 
 #' Tract Format Verification
@@ -286,7 +311,7 @@ plot_tract <- function(tract, transparency = 1) {
 #' cst_right <- read_tract(file)
 #' bind_tracts(cst_left, cst_right)
 bind_tracts <- function(...) {
-  tract_list <- list(...)
+  tract_list <- rlang::flatten(rlang::dots_values(...))
   res <- NULL
 
   for (i in seq_along(tract_list)) {
@@ -427,20 +452,57 @@ get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10
 }
 
 align_tract <- function(tract) {
-  min_index <- tract$data %>%
-    purrr::map_dbl(get_curvilinear_length, validate = FALSE) %>%
-    which.min()
-  shortest_streamline <- tract$data[[min_index]]
-
+  min_index <- which.min(purrr::map_dbl(tract$data, get_curvilinear_length))
+  min_streamline <- tract$data[[min_index]]
   tract$data <- tract$data %>%
-    purrr::map(
-      align_streamline,
-      fixed_streamline = shortest_streamline,
-      cost_function = cost_L1
-    )
-
+    purrr::map(align_streamline,
+               fixed_streamline = min_streamline,
+               cost_function = cost_L1)
   tract
 }
+
+# align_tract <- function(tract) {
+#   depths <- tract %>%
+#     roahd::as.mfData() %>%
+#     roahd::multiMBD()
+#   median_index <- which.max(depths)
+#   median_depth <- max(depths)
+#
+#   return(
+#     list(
+#       tract = tract,
+#       median_idx = median_index,
+#       max_depth = median_depth
+#     )
+#   )
+#
+#   current_index <- median_index + 1
+#   pos <- 0
+#   max_iter <- 10L
+#   while (current_index != median_index && pos < max_iter) {
+#     pos <- pos + 1
+#     writeLines(paste0("    Obs. ", pos))
+#     reference_streamline <- tract$data[[median_index]]
+#     tract$data <- tract$data %>%
+#       purrr::map(
+#         align_streamline,
+#         fixed_streamline = reference_streamline,
+#         cost_function = cost_L1
+#       )
+#     tmp_depths <- tract %>%
+#       roahd::as.mfData() %>%
+#       roahd::multiMBD()
+#     current_index <- median_index
+#     median_index <- which.max(tmp_depths)
+#     median_depth <- max(tmp_depths)
+#   }
+#
+#   list(
+#     tract = tract,
+#     median_idx = median_index,
+#     max_depth = median_depth
+#   )
+# }
 
 #' Modified Band Depth for Tracts Objects
 #'
@@ -527,9 +589,8 @@ clusterize <- function(tract, k = 1L, max_iter = 10L, validate = TRUE) {
   for (i in seq_len(k)) {
     reverse_groups[[i]] <- centroids[i]
   }
-  depths <- rep(0, n)
   within <- rep(0, k)
-  final_wmse <- 0
+  wmse <- rep(0, max_iter)
 
   clustered_tract <- list()
 
@@ -586,19 +647,24 @@ clusterize <- function(tract, k = 1L, max_iter = 10L, validate = TRUE) {
 
     # Assignment step
     # New attempt
+    writeLines("  * Assign streamlines to clusters...")
+    writeLines(paste0("    Centroids: ", centroids))
     if (iter == 1L) {
+      # At first iteration, assign labels according to L1 distance to centroids
       groups <- labels %>%
         purrr::map_int(function(id) {
-          writeLines(paste0("  * Assignment Step: Label ", id))
           distances <- rep(0, k)
           for (i in seq_len(k))
-            distances[i] <- get_L1_distance(tract$data[[id]], tract$data[[centroids[i]]])
+            distances[i] <- get_L1_distance(
+              streamline1 = tract$data[[id]],
+              streamline2 = tract$data[[centroids[i]]]
+              )
           which.min(distances)
         })
     } else {
+      # Assign labels to cluster with maximal relative depth
       groups <- labels %>%
         purrr::map_int(function(id) {
-          writeLines(paste0("  * Assignment Step: Label ", id))
           relative_depths <- rep(0, k)
           for (i in seq_len(k)) {
             med <- roahd::median_mfData(clustered_tract[[i]])
@@ -608,16 +674,19 @@ clusterize <- function(tract, k = 1L, max_iter = 10L, validate = TRUE) {
               y = med$fDList[[2]]$values[1, ],
               z = med$fDList[[3]]$values[1, ]
             )
-            current_streamline <- tract$data[[id]] %>%
-              align_streamline(
-                fixed_streamline = median_streamline,
-                cost_function = cost_L1
-              )
+            # current_streamline <- tract$data[[id]] %>%
+            #   align_streamline(
+            #     fixed_streamline = median_streamline,
+            #     cost_function = cost_L1
+            #   )
+            current_streamline <- tract$data[[id]]
             current_tract <- tract[id]
             current_tract$data[[1]] <- current_streamline
             current_tract <- current_tract %>%
               reparametrize_tract(median_streamline$s, FALSE) %>%
               roahd::as.mfData()
+            # TO DO: what happens if median is longer that current streamline?
+            # Currently approx fill in with NA, how does roahd deal with it?
             relative_depths[i] <- 0
             for (j in seq_len(med$L)) {
               fd_target <- current_tract$fDList[[j]]
@@ -634,32 +703,210 @@ clusterize <- function(tract, k = 1L, max_iter = 10L, validate = TRUE) {
       reverse_groups[[i]] <- labels[groups == i]
 
     # Find new cluster centers
-    writeLines(paste0("Representation Step"))
+    writeLines("  * Computing cluster medians...")
     for (i in seq_len(k)) {
       group <- (groups == i)
       group_labels <- labels[group]
       subtract <- tract[group_labels]
-      clustered_tract[[i]] <- subtract %>%
-        align_tract() %>%
-        roahd::as.mfData()
-      tmp_depths <- roahd::multiMBD(clustered_tract[[i]])
-      centroids[i] <- group_labels[which.max(tmp_depths)]
-      depths[group_labels] <- tmp_depths
-      within[i] <- max(tmp_depths)
+      aln <- align_tract(subtract)
+      clustered_tract[[i]] <- roahd::as.mfData(aln$tract)
+      centroids[i] <- group_labels[aln$median_idx]
+      within[i] <- IQR(clustered_tract[[i]])# aln$max_depth
+    }
+
+    wmse[iter] <- mean(within)
+    writeLines(paste0("    Sum of within-cluster maximum depths: ", wmse[iter]))
+  }
+  list(groups = groups, cendroids = centroids, within = within, wmse = wmse,
+       clustered_tract = clustered_tract)
+}
+
+clusterize_test <- function(tract, k = 1L, max_iter = 10L) {
+  n <- length(tract$data)
+  labels <- seq_len(n)
+  centroids <- sample.int(n, k)
+  groups <- rep(0, n)
+  wmse <- rep(0, max_iter)
+
+  tract <- reparametrize_tract(tract, grid = numeric(), validate = FALSE)
+
+  clustered_tract <- list()
+
+  for (iter in seq_len(max_iter)) {
+
+    # Some verbose display
+    str_iter <- formatC(
+      iter,
+      width = stringr::str_length(max_iter),
+      format = "d",
+      flag = "0"
+    )
+    writeLines(paste0("- Iteration ", str_iter, "/", max_iter))
+
+    reverse_groups <- list()
+    for (i in seq_len(k)) {
+      reverse_groups[[i]] <- centroids[i]
+    }
+
+    # Assignment step: Phase 1 (corners)
+    # Handle corner cases to have 2 elements per cluster to start with,
+    # otherwise you cannot compute relative depths
+    corners <- centroids %>%
+      purrr::map_int(function(idx) {
+        distances <- rep(0, n)
+        for (i in labels) {
+          if (i %in% centroids)
+            distances[i] <- 1e100
+          else
+            distances[i] <- get_L1_distance(tract$data[[i]], tract$data[[idx]])
+        }
+        which.min(distances)
+      })
+    for (i in seq_len(k))
+      reverse_groups[[i]] <- c(reverse_groups[[i]], corners[i])
+
+    # print(reverse_groups)
+
+    # Assignment step: Phase 2 (normal assignment)
+    for (i in labels) {
+      writeLines(paste0("  * Assignment Step: Label ", i))
+      skip_label <- FALSE
+      for (j in seq_len(k)) {
+        if (i %in% reverse_groups[[j]]) {
+          skip_label <- TRUE
+          break
+        }
+      }
+      if (skip_label) next
+      tract_target <- roahd::as.mfData(tract[i])
+      # print(tract_target)
+      relative_depths <- rep(0, k)
+      for (j in seq_len(k)) {
+        group_labels <- reverse_groups[[j]]
+        tract_reference <- roahd::as.mfData(tract[group_labels])
+        depth <- 0
+        for (l in 1:tract_reference$L)
+          depth <- depth + roahd::MBD_relative(tract_target$fDList[[l]], tract_reference$fDList[[l]])
+        relative_depths[j] <- depth / tract_reference$L
+      }
+      optimal_cluster <- which.max(relative_depths)
+      # depth_total <- depth_total + max(relative_depths)
+      groups[i] <- optimal_cluster
+      reverse_groups[[optimal_cluster]] <- unique(c(reverse_groups[[optimal_cluster]], i))
+    }
+
+    # Find new cluster centers
+    writeLines("  * Computing cluster medians...")
+    depth_total <- 0
+    for (i in seq_len(k)) {
+      group_labels <- reverse_groups[[i]]
+      subtract <- tract[group_labels]
+      clustered_tract[[i]] <- roahd::as.mfData(subtract)
+      depths <- roahd::multiMBD(clustered_tract[[i]])
+      centroids[i] <- group_labels[which.max(depths)]
+      depth_total <- max(depths)
+    }
+
+    wmse[iter] <- depth_total
+    writeLines(paste0("    Sum of within-cluster maximum depths: ", wmse[iter]))
+  }
+  list(groups = groups, cendroids = centroids, wmse = wmse,
+       clustered_tract = clustered_tract)
+}
+
+simplified_clusterize <- function(tract, k = 1L, max_iter = 10L, validate = TRUE) {
+  if (validate) {
+    if (!is_tract(tract))
+      stop("Input should be a tract object.")
+  }
+
+  n <- length(tract$data)
+  labels <- seq_len(n)
+  centroids <- sample.int(n, k)
+  groups <- rep(0, n)
+  reverse_groups <- list()
+  for (i in seq_len(k)) {
+    reverse_groups[[i]] <- centroids[i]
+  }
+  within <- rep(0, k)
+
+  clustered_tract <- list()
+  mf_tract <- roahd::as.mfData(tract)
+  res <- list()
+
+  for (iter in seq_len(max_iter)) {
+
+    # Some verbose display
+    str_iter <- formatC(
+      iter,
+      width = stringr::str_length(max_iter),
+      format = "d",
+      flag = "0"
+    )
+    writeLines(paste0("- Iteration ", str_iter, "/", max_iter))
+
+    # Assignment step
+    writeLines("  * Assign streamlines to clusters...")
+    writeLines(paste0("    Centroids: ", centroids))
+    total <- 0
+    if (iter == 1L) {
+      # At first iteration, assign labels according to L1 distance to centroids
+      groups <- labels %>%
+        purrr::map_int(function(id) {
+          distances <- rep(0, k)
+          for (i in seq_len(k))
+            distances[i] <- get_L1_distance(
+              streamline1 = tract$data[[id]],
+              streamline2 = tract$data[[centroids[i]]]
+            )
+          which.min(distances)
+        })
+    } else {
+      # Assign labels to cluster with maximal relative depth
+      tmp <- labels %>%
+        purrr::map(function(id) {
+          relative_depths <- rep(0, k)
+          for (i in seq_len(k)) {
+            relative_depths[i] <- 0
+            for (j in seq_len(mf_tract$L)) {
+              fd_target <- mf_tract$fDList[[j]][id, ]
+              fd_reference <- clustered_tract[[i]]$fDList[[j]]
+              relative_depths[i] <- relative_depths[i] +
+                roahd::MBD_relative(fd_target, fd_reference)
+            }
+          }
+          list(maxi = max(relative_depths), argmaxi = which.max(relative_depths))
+        })
+      groups <- purrr::map_int(tmp, "argmaxi")
+      total <- sum(purrr::map_dbl(tmp, "maxi"))
+    }
+    writeLines(paste0("Crit: ", total))
+
+    for (i in seq_len(k))
+      reverse_groups[[i]] <- labels[groups == i]
+
+    # Find new cluster centers
+    writeLines("  * Computing cluster medians...")
+    for (i in seq_len(k)) {
+      group <- (groups == i)
+      group_labels <- labels[group]
+      subtract <- mf_tract
+      subtract$N <- length(group_labels)
+      for (j in 1:mf_tract$L)
+        subtract$fDList[[j]] <- mf_tract$fDList[[j]][group_labels, ]
+      clustered_tract[[i]] <- subtract
+      depths <- roahd::multiMBD(subtract)
+      centroids[i] <- group_labels[which.max(depths)]
+      within[i] <- IQR(subtract)# max(depths)
     }
 
     wmse <- mean(within)
-    print(paste0("WMSE: ", wmse))
-    if (wmse > final_wmse || iter == 1L) {
-      final_groups <- groups
-      final_centroids <- centroids
-      final_within <- within
-      final_wmse <- wmse
-      print(paste0("Final WMSE: ", final_wmse))
-    }
+    writeLines(paste0("    Sum of within-cluster maximum depths: ", wmse))
+
+    res[[iter]] <- list(groups = groups, cendroids = centroids, within = within,
+                        wmse = wmse, clustered_tract = clustered_tract)
   }
-  list(groups = final_groups, cendroids = final_centroids,
-       within = final_within, wmse = final_wmse)
+  res
 }
 
 find_best_cluster <- function(idx, k, groups, labels, depths, tract) {
@@ -748,14 +995,7 @@ IQR.numeric <- stats::IQR
 
 #' @export
 #' @rdname IQR
-IQR.tract <- function(x, validate = TRUE) {
-  if (validate) {
-    if (!is_tract(x))
-      stop("Input should be a tract object.")
-  }
-  x <- x %>%
-    align_tract() %>%
-    roahd::as.mfData()
+IQR.mfData <- function(x, ...) {
   depths <- roahd::multiMBD(x)
   depth_threshold <- max(depths) *
     optimize(depth_cost, c(0, 1), depth_data = depths)$minimum
@@ -797,4 +1037,91 @@ IQR.tract <- function(x, validate = TRUE) {
     return(tract)
   tract$data <- tract$data[i]
   tract
+}
+
+#' Tract Simplification by Cluster Medians
+#'
+#' @param tract An object of class \code{\link{tract}}.
+#' @param clusters A numeric or integer vector giving the cluster membership of
+#'   each \code{\link{streamline}} in the \code{\link{tract}}.
+#'
+#' @return A \code{\link{tract}}.
+#' @export
+#'
+#' @examples
+#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
+#' cst_left <- read_tract(file)
+#' m <- simplify_tract(cst_left)
+simplify_tract <- function(tract, clusters = NULL, validate = TRUE) {
+  if (validate) {
+    if (!is_tract(tract))
+      stop("First argument should be an object of class tract.")
+  }
+  if (is.null(clusters) && tract$name == "CST") {
+    cl <- cluster_cst(tract, validate = FALSE)
+    writeLines(paste0("   --> ", cl$G, " clusters detected."))
+    clusters <- cl$classification
+  }
+  all_clusters <- sort(unique(clusters))
+  subtracts <- list()
+  for (i in seq_along(all_clusters)) {
+    cl <- all_clusters[i]
+    writeLines(paste0(" - Simplyfing cluster #", cl, "..."))
+    subtract <- tract[clusters == cl]
+    if (length(subtract$data) == 1L) {
+      subtracts[[i]] <- subtract
+      next
+    }
+    subtract <- subtract %>%
+      align_tract() %>%
+      roahd::as.mfData() %>%
+      roahd::median_mfData() %>%
+      as_tract(metadata = tract)
+    subtract$scan <- cl
+    subtracts[[i]] <- subtract
+  }
+  bind_tracts(subtracts)
+}
+
+
+#' Clustering Method for the Cortico-Spinal Tract
+#'
+#' This function uses the \code{\link[mclust]{Mclust}} method from the
+#' \code{mclust} package to fit a Gaussian mixture model to the end-points of
+#' the CST on the precentral gyrus via Expectation-Maximization for selecting
+#' the optimal clustering according to the Bayesian Information Criterion.
+#'
+#' @param cst An object of class \code{\link{tract}} representing the
+#'   cortico-spinal tract.
+#' @param validate A boolean specifying whether the input object should be
+#'   checked or not (default: \code{TRUE}). For this function, it has to be of
+#'   class \code{\link{tract}} and represent the cortico-spinal tract
+#'   (\code{name} field of the \code{\link{tract}} should read \code{"CST"}).
+#'
+#' @return An object of class \code{\link[mclust]{Mclust}} providing the
+#'   BIC-optimal Gaussian mixture model for clustering the CST streamlines based
+#'   on cortical position of their end-point.
+#' @export
+#' @importFrom mclust mclustBIC
+#'
+#' @examples
+#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
+#' cst_left <- read_tract(file)
+#' cl <- cluster_cst(cst_left)
+cluster_cst <- function(cst, validate = TRUE) {
+  if (validate) {
+    if (!is_tract(cst))
+      stop("The input should be an object of class tract.")
+    if (cst$name != "CST")
+      stop("The input tract should be a CST (name field should indicate CST).")
+  }
+  writeLines(" - Performing streamline clustering based on cortical position...")
+  cst %>%
+    tibble::as_tibble() %>%
+    dplyr::transmute(
+      x0 = purrr::map_dbl(data, ~ .$x[1]) %>% abs(),
+      y0 = purrr::map_dbl(data, ~ .$y[1]),
+      z0 = purrr::map_dbl(data, ~ .$z[1])
+    ) %>%
+    mclust::Mclust(G = seq_len(60L), prior = mclust::priorControl())
 }
