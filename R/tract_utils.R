@@ -20,17 +20,11 @@ tract <- function(...) {
   as_tract(tibble::lst(...))
 }
 
-#' @export
-#' @rdname tract
-tract_ <- function(xs) {
-  as_tract(tibble::lst_(xs))
-}
-
 #' Tract Coercion
 #'
 #' \code{as_tract} coerces an input \code{list} into a \code{tract}.
 #'
-#' @param list Input list.
+#' @param x Input list.
 #' @param validate A boolean specifying whether the class of the input object
 #'   should be checked (default: \code{TRUE}).
 #'
@@ -41,76 +35,92 @@ tract_ <- function(xs) {
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
 #' tr <- as_tract(cst_left)
-as_tract <- function(input, ...) {
-  UseMethod("as_tract", input)
+as_tract <- function(x, validate = TRUE, biomarkers = NULL) {
+  UseMethod("as_tract", x)
 }
 
 #' @export
 #' @rdname as_tract
-as_tract.list <- function(input, validate = TRUE, ...) {
-  vars <- stringr::str_to_lower(names(input))
-  names(input) <- vars
-
+as_tract.list <- function(x, validate = TRUE, biomarkers = NULL) {
   if (validate) {
-    if (!is.list(input))
-      stop("The input object should be a list.")
+    if (!is.list(x))
+      stop("First input should be a list.")
 
-    if (!all(c("name", "case", "scan", "side", "data") %in% vars))
-      stop("Input list should contain fields name, case, scan, side and data.")
+    if (!all(c("name", "case", "scan", "side", "data") %in% names(x)))
+      stop("Input list should contain fields name, case, scan, and side.")
 
-    if (!is.character(input$name) | length(input$name) != 1L)
-      stop("The name field should be a character vector of length 1.")
+    if (!is.character(x$name))
+      stop("The name field should be formatted as string.")
 
-    if (!is.character(input$case) | length(input$case) != 1L)
-      stop("The case field should be a character vector of length 1.")
+    if (!is.character(x$case))
+      stop("The case field should be formatted as string.")
 
-    if (!is.character(input$scan) | length(input$scan) != 1L)
-      stop("The scan field should be a character vector of length 1.")
+    if (!is.character(x$scan))
+      stop("The scan field should be formatted as string.")
 
-    if (!is.character(input$side) | length(input$side) != 1L)
-      stop("The side field should be a character vector of length 1.")
+    if (!is.character(x$side))
+      stop("The side field should be formatted as string.")
 
-    data_ok <- is.list(input$data)
+    if (!is.list(x$data))
+      stop("The data field shoubd be a list.")
 
-    if (!data_ok)
-      stop("The data field should be a list.")
-
-    for (i in seq_along(input$data)) {
-      if (!is_streamline(input$data[[i]])) {
-        data_ok <- FALSE
+    all_streamline <- TRUE
+    for (i in seq_along(x$data)) {
+      str <- x$data[[i]]
+      if (!is_streamline(str)) {
+        all_streamline <- FALSE
         break
       }
     }
 
-    if (!data_ok)
-      stop("The data field should only contain streamline objects.")
+    if (!all_streamline && !is_mfData(x$data))
+      stop("The data list should contain only streamline or mfData objects.")
   }
 
-  res <- list(
-    name = input$name,
-    case = input$case,
-    scan = input$scan,
-    side = input$side,
-    data = input$data
-  )
+  # TO DO: How to handle presence of biomarkers in mfData?
+  if (is_mfData(x$data)) {
+    streamlines <- x$data
+    s <- seq(streamlines$t0, streamlines$tP, length.out = streamlines$P)
+    N <- streamlines$N
+    L <- streamlines$L
 
-  class(res) <- c("tract", class(res))
+    if (L < 3L)
+      stop("mfData object should at least contain the 3D coordinate positions of the streamline points.")
 
-  res
+    streamlines <- seq_len(N) %>%
+      purrr::map(~ streamline(
+        s = s,
+        x = as.numeric(streamlines$fDList[[1]]$values[., ]),
+        y = as.numeric(streamlines$fDList[[2]]$values[., ]),
+        z = as.numeric(streamlines$fDList[[3]]$values[., ])
+      ))
+
+    if (!is.null(biomarkers)) {
+      B <- length(biomarkers)
+      if (B + 3 != L)
+        stop("The number of requested biomarkers differs from the number of biomarkers in the mfData object.")
+      for (i in 1:N) {
+        str <- streamlines[[i]]
+        for (j in 1:B)
+          str[[biomarkers[i]]] <- as.numeric(streamlines$fDList[[3+j]]$values[i, ])
+        streamlines[[i]] <- str
+      }
+    }
+
+    x$data <- streamlines
+  }
+
+  x <- tibble::as_tibble(x)
+  class(x) <- c("tract", class(x))
+  x
 }
 
 #' @export
 #' @rdname as_tract
-as_tract.mfData <- function(input, metadata, ...) {
-  s <- seq(input$t0, input$tP, length.out = input$P)
-  metadata$data <- seq_len(input$N) %>%
-    purrr::map(~ streamline(
-      s = s,
-      x = as.numeric(input$fDList[[1]]$values[., ]),
-      y = as.numeric(input$fDList[[2]]$values[., ]),
-      z = as.numeric(input$fDList[[3]]$values[., ])
-    ))
-  as_tract(metadata)
+as_tract.tbl_df <- function(x, validate = TRUE, biomarkers = NULL) {
+  x %>%
+    as.list() %>%
+    as_tract(validate, biomarkers)
 }
 
 #' Tract Format Verification
@@ -148,35 +158,24 @@ is_tract <- is.tract
 #' @examples
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
-read_tract <- function(path) {
-  filename <- path %>%
-    stringr::str_split("/") %>%
-    purrr::map_chr(dplyr::last) %>%
-    stringr::str_replace(".csv", "") %>%
-    stringr::str_split("_")
-
-  n <- purrr::map_int(filename, length)
-  if (n < 3L || n > 4L)
-    stop("The CSV file name should contain 3 or 4 fields separated by '_'")
-
-  tract_name <- purrr::map_chr(filename, 3L)
-  case <- purrr::map_chr(filename, 1L)
-  scan <- purrr::map_chr(filename, 2L)
-  side <- NA_character_
-  if (n == 4L)
-    side <- purrr::map_chr(filename, 4L)
-
+read_tract <- function(path, name, case, scan, side = NA_character_) {
   data <- readr::read_csv(path)
+
+  if (ncol(data) < 5L)
+    stop("The input CSV file should contain at least 5 columns.")
+
+  required_vars <- c("X", "Y", "Z", "PointId", "StreamlineId")
+  if (!all(required_vars %in% names(data)))
+    stop("The CSV file should contain at least the variables X, Y, Z, PointId and StreamelineId.")
 
   if (nrow(data) == 0)
     return(tract(
-      name = tract_name, case = case, scan = scan, side = side, data = list()
+      name = name,
+      case = case,
+      scan = scan,
+      side = side,
+      data = list()
     ))
-
-  required_vars <- c("LineID", "LPointID", "X", "Y", "Z")
-  if (!all(required_vars %in% names(data)))
-    stop("The data tibble should contain at least the variables LineID,
-LPointID, X, Y, and Z.")
 
   model <- "None"
   check_dti <- data %>%
@@ -188,22 +187,30 @@ LPointID, X, Y, and Z.")
   if (check_dti == 6L)
     model <- "DTI"
 
-  data <- data %>%
-    dplyr::arrange(LineID, LPointID) %>%
-    add_diffusion_information(model) %>%
-    dplyr::group_by(LineID) %>%
-    dplyr::do(streamlines = streamline(
-      x = .$X,
-      y = .$Y,
-      z = .$Z,
-      diffusion = switch(model,
-                         None = NA_real_,
-                         DTI = .$Tensors)
-    )) %>%
-    dplyr::ungroup()
+  # data <- data %>%
+  #   dplyr::arrange(StreamlineId, PointId) %>%
+  #   add_biomarkers(model)
 
-  tract(name = tract_name, case = case, scan = scan, side = side,
-        data = data$streamlines)
+  # data <- switch(
+  #   model,
+  #   None = data %>%
+  #     dplyr::group_by(StreamlineId) %>%
+  #     dplyr::do(streamlines = streamline(
+  #       x = .$X, y = .$Y, z = .$Z
+  #     )) %>%
+  #     dplyr::ungroup(),
+  #   DTI = data %>%
+  #     dplyr::group_by(StreamlineId) %>%
+  #     dplyr::do(streamlines = streamline(
+  #       x = .$X, y = .$Y, z = .$Z,
+  #       AD = .$AD, RD = .$RD, MD = .$MD, FA = .$FA
+  #     )) %>%
+  #     dplyr::ungroup()
+  # )
+  #
+  # tract(name = name, case = case, scan = scan, side = side, data = data$streamlines)
+
+  data
 }
 
 #' Tract Writer
@@ -216,24 +223,17 @@ LPointID, X, Y, and Z.")
 #'
 #' @return TO DO.
 #' @export
-write_tract <- function(tract, folder) {
+write_tract <- function(tract, file, ...) {
   if (!is_tract(tract))
     stop("The input object is not a tract.")
 
-  path <-
-    stringr::str_c(tract$case, tract$scan, tract$name, tract$side, sep = "_") %>%
-    stringr::str_c(folder, ., ".csv")
-
-  data <- tract %>%
-    tibble::as_tibble() %>%
-    dplyr::mutate(
-      LPointID = purrr::map(data, ~ seq_len(nrow(.)) - 1L),
-      LineID = seq_len(nrow(.)) - 1L
-    ) %>%
-    tidyr::unnest() %>%
-    dplyr::select(x, y, z, LPointID, LineID)
-
-  readr::write_csv(data, path)
+  tract %>%
+    tidyr::unnest(.id = "StreamlineId") %>%
+    dplyr::group_by(StreamlineId) %>%
+    dplyr::mutate(PointId = 1:n()) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(X = x, Y = y, Z = z, PointId, StreamlineId, ...) %>%
+    readr::write_csv(file)
 }
 
 #' Tract Plotting
@@ -253,13 +253,8 @@ write_tract <- function(tract, folder) {
 #' cst <- bind_tracts(cst_left, cst_right)
 #' plot_tract(cst)
 plot_tract <- function(tract, transparency = 1) {
-  if (is_tract(tract))
-    tract <- tibble::as_tibble(tract)
-  else if (tibble::is_tibble(tract)) {
-    if (!all(c("name", "case", "scan", "side", "data") %in% names(tract)))
-      stop("The input tibble does not contain all the required fields.")
-  } else
-    stop("Input object is neither of class tract nor of class tibble.")
+  if (!is_tract(tract))
+    stop("Input object is not of class tract.")
 
   name <- unique(tract$name)
   if (length(name) > 1L)
@@ -311,17 +306,8 @@ plot_tract <- function(tract, transparency = 1) {
 #' cst_right <- read_tract(file)
 #' bind_tracts(cst_left, cst_right)
 bind_tracts <- function(...) {
-  tract_list <- rlang::flatten(rlang::dots_values(...))
-  res <- NULL
-
-  for (i in seq_along(tract_list)) {
-    tract <- tract_list[[i]]
-    if (!is_tract(tract))
-      stop("One of the inputs is not a tract.")
-    res <- res %>% dplyr::bind_rows(tibble::as_tibble(tract))
-  }
-
-  res
+  res <- dplyr::bind_rows(...)
+  as_tract(res)
 }
 
 #' Tract Reparametrization
@@ -343,59 +329,68 @@ bind_tracts <- function(...) {
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
 #' reparametrize_tract(cst_left)
-reparametrize_tract <- function(tract, grid = 0L, validate = TRUE) {
+reparametrize_tract <- function(tract, ..., grid = 0L, validate = TRUE) {
   if (validate) {
     if (!is_tract(tract))
       stop("First input should be a tract object.")
   }
 
-  UseMethod("reparametrize_tract", grid)
-}
-
-#' @export
-#' @rdname reparametrize_tract
-reparametrize_tract.integer <- function(tract, grid = 0L, validate = TRUE) {
-  if (grid == 0L) {
-    grid <- tract$data %>%
-      purrr::map_int(nrow) %>%
-      mean() %>%
-      round()
+  biomarkers <- dplyr::quos(...)
+  print(biomarkers)
+  biomarker_names <- biomarkers %>%
+    purrr::map(dplyr::quo_name)
+  print(biomarker_names)
+  l <- list()
+  for (i in seq_along(biomarkers)) {
+    l[[i]] <- dplyr::quo(!!(biomarker_names[[i]]) := approx(.data$s, .data[[!!(biomarker_names[[i]])]], xout = s)$y)
   }
 
-  tract$data <- tract$data %>%
-    purrr::map(dplyr::do, streamline(
-      s = modelr::seq_range(.$s, n = grid),
-      x = approx(.$s, .$x, xout = s)$y,
-      y = approx(.$s, .$y, xout = s)$y,
-      z = approx(.$s, .$z, xout = s)$y,
-      validate = FALSE
-    ))
+  print(l)
 
-  tract
-}
+  if (length(grid) == 1L) {
+    if (grid == 0L) {
+      grid <- tract$data %>%
+        purrr::map_int(nrow) %>%
+        mean() %>%
+        round()
+    }
 
-#' @export
-#' @rdname reparametrize_tract
-reparametrize_tract.numeric <- function(tract, grid = numeric(), validate = TRUE) {
-  if (length(grid) == 0L) {
-    grid_length <- tract$data %>%
-      purrr::map_int(nrow) %>%
-      mean() %>%
-      round()
-    max_abs <- tract$data %>%
-      purrr::map_dbl(get_curvilinear_length) %>%
-      min()
-    grid <- seq(0, max_abs, length.out = grid_length)
+    tract$data <- tract$data %>%
+      purrr::map(dplyr::do, streamline(
+        s = modelr::seq_range(.$s, n = grid),
+        x = approx(.$s, .$x, xout = s)$y,
+        y = approx(.$s, .$y, xout = s)$y,
+        z = approx(.$s, .$z, xout = s)$y,
+        !!!l,
+        validate = FALSE
+      ))
+  } else {
+    if (length(grid) == 0L) {
+      grid_length <- tract$data %>%
+        purrr::map_int(nrow) %>%
+        mean() %>%
+        round()
+      s_min <- tract$data %>%
+        purrr::map(pull, s) %>%
+        purrr::map_dbl(min) %>%
+        max()
+      s_max <- tract$data %>%
+        purrr::map(pull, s) %>%
+        purrr::map_dbl(max) %>%
+        min()
+      grid <- seq(s_min, s_max, length.out = grid_length)
+    }
+
+    tract$data <- tract$data %>%
+      purrr::map(dplyr::do, streamline(
+        s = grid,
+        x = approx(.$s, .$x, xout = s)$y,
+        y = approx(.$s, .$y, xout = s)$y,
+        z = approx(.$s, .$z, xout = s)$y,
+        !!!l,
+        validate = FALSE
+      ))
   }
-
-  tract$data <- tract$data %>%
-    purrr::map(dplyr::do, streamline(
-      s = grid,
-      x = approx(.$s, .$x, xout = s)$y,
-      y = approx(.$s, .$y, xout = s)$y,
-      z = approx(.$s, .$z, xout = s)$y,
-      validate = FALSE
-    ))
 
   tract
 }
@@ -451,12 +446,34 @@ get_distance_vector <- function(tract, grid_length = 50L, ncores = 1L, nobs = 10
   tmp$distances
 }
 
-align_tract <- function(tract) {
-  min_index <- which.min(purrr::map_dbl(tract$data, get_curvilinear_length))
-  min_streamline <- tract$data[[min_index]]
+align_tract <- function(tract, id = NULL) {
+  if (is.null(id)) {
+    new_index <- 0L
+    old_index <- 1L
+
+    while (new_index != old_index) {
+      old_index <- new_index
+
+      new_index <- tract %>%
+        roahd::as.mfData() %>%
+        roahd::multiMBD() %>%
+        which.max()
+
+      reference_streamline <- tract$data[[new_index]]
+      tract$data <- tract$data %>%
+        purrr::map(align_streamline,
+                   fixed_streamline = reference_streamline,
+                   cost_function = cost_L1)
+    }
+
+    return(tract)
+  }
+
+  new_index <- which(tract$case == id)
+  reference_streamline <- tract$data[[new_index]]
   tract$data <- tract$data %>%
-    purrr::map(align_streamline,
-               fixed_streamline = min_streamline,
+    purrr::map(align_streamline2,
+               fixed_streamline = reference_streamline,
                cost_function = cost_L1)
   tract
 }
@@ -927,41 +944,61 @@ find_best_cluster <- function(idx, k, groups, labels, depths, tract) {
 }
 
 as.mfData.tract <- function(x, grid_length = NULL, ...) {
-  size <- min(purrr::map_dbl(x$data, get_curvilinear_length))
+  s_min <- x$data %>%
+    purrr::map(pull, s) %>%
+    purrr::map_dbl(min) %>%
+    max()
+
+  s_max <- x$data %>%
+    purrr::map(pull, s) %>%
+    purrr::map_dbl(max) %>%
+    min()
 
   if (is.null(grid_length))
     grid_length <- round(mean(purrr::map_int(x$data, nrow)))
 
-  s <- seq(0, size, length.out = grid_length)
+  s <- seq(s_min, s_max, length.out = grid_length)
 
   tmp <- x %>%
     reparametrize_tract(grid = s, validate = FALSE) %>%
     tibble::as_tibble() %>%
     dplyr::select(data) %>%
-    tidyr::unnest(.id = "LineID") %>%
-    dplyr::group_by(LineID) %>%
-    dplyr::mutate(PointID = seq_len(n())) %>%
-    dplyr::ungroup(LineID)
+    tidyr::unnest(.id = "StreamlineId") %>%
+    dplyr::group_by(StreamlineId) %>%
+    dplyr::mutate(PointId = seq_len(n())) %>%
+    dplyr::ungroup(StreamlineId) %>%
+    tidyr::drop_na()
 
   xmatrix <- tmp %>%
-    dplyr::select(LineID, PointID, x) %>%
-    tidyr::spread(PointID, x) %>%
-    dplyr::select(-LineID) %>%
+    dplyr::select(StreamlineId, PointId, x) %>%
+    tidyr::spread(PointId, x) %>%
+    dplyr::select(-StreamlineId) %>%
     as.matrix()
 
   ymatrix <- tmp %>%
-    dplyr::select(LineID, PointID, y) %>%
-    tidyr::spread(PointID, y) %>%
-    dplyr::select(-LineID) %>%
+    dplyr::select(StreamlineId, PointId, y) %>%
+    tidyr::spread(PointId, y) %>%
+    dplyr::select(-StreamlineId) %>%
     as.matrix()
 
   zmatrix <- tmp %>%
-    dplyr::select(LineID, PointID, z) %>%
-    tidyr::spread(PointID, z) %>%
-    dplyr::select(-LineID) %>%
+    dplyr::select(StreamlineId, PointId, z) %>%
+    tidyr::spread(PointId, z) %>%
+    dplyr::select(-StreamlineId) %>%
     as.matrix()
 
-  roahd::mfData(s, list(xmatrix, ymatrix, zmatrix))
+  if ("fa" %in% names(tmp)) {
+    famatrix <- tmp %>%
+      dplyr::select(StreamlineId, PointId, fa) %>%
+      tidyr::spread(PointId, fa) %>%
+      dplyr::select(-StreamlineId) %>%
+      as.matrix()
+  }
+
+  if ("fa" %in% names(tmp))
+    roahd::mfData(s, list(xmatrix, ymatrix, zmatrix, famatrix))
+  else
+    roahd::mfData(s, list(xmatrix, ymatrix, zmatrix))
 }
 
 #' Inter-Quartile Range for arbitrary datasets
@@ -1031,13 +1068,17 @@ IQR.mfData <- function(x, ...) {
 #' n <- length(cst_left$data)
 #' selected_streamlines <- sample(c(TRUE, FALSE), n, replace = TRUE)
 #' t3 <- cst_left[selected_streamlines]
-#' @export
-"[.tract" <- function(tract, i) {
-  if (missing(i))
-    return(tract)
-  tract$data <- tract$data[i]
-  tract
-}
+# "[.tract" <- function(tract, i) {
+#   if (missing(i))
+#     return(tract)
+#
+#   if (is.integer(i))
+#     res <- dplyr::slice(tract, i)
+#   else
+#     res <- dplyr::filter(tract, i)
+#   class(res) <- c("tract", class(res))
+#   res
+# }
 
 #' Tract Simplification by Cluster Medians
 #'
@@ -1067,17 +1108,22 @@ simplify_tract <- function(tract, clusters = NULL, validate = TRUE) {
   for (i in seq_along(all_clusters)) {
     cl <- all_clusters[i]
     writeLines(paste0(" - Simplyfing cluster #", cl, "..."))
-    subtract <- tract[clusters == cl]
-    if (length(subtract$data) == 1L) {
+    subtract <- dplyr::filter(tract, clusters == cl)
+    class(subtract) <- c("tract", class(subtract))
+    if (nrow(subtract) == 1L) {
       subtracts[[i]] <- subtract
       next
     }
-    subtract <- subtract %>%
-      align_tract() %>%
-      roahd::as.mfData() %>%
-      roahd::median_mfData() %>%
-      as_tract(metadata = tract)
-    subtract$scan <- cl
+    subtract <- tract(
+      name = subtract$name,
+      case = subtract$case,
+      scan = subtract$scan,
+      side = subtract$side,
+      data = subtract %>%
+        align_tract() %>%
+        roahd::as.mfData() %>%
+        roahd::median_mfData()
+    )
     subtracts[[i]] <- subtract
   }
   bind_tracts(subtracts)
@@ -1116,12 +1162,14 @@ cluster_cst <- function(cst, validate = TRUE) {
       stop("The input tract should be a CST (name field should indicate CST).")
   }
   writeLines(" - Performing streamline clustering based on cortical position...")
-  cst %>%
-    tibble::as_tibble() %>%
-    dplyr::transmute(
-      x0 = purrr::map_dbl(data, ~ .$x[1]) %>% abs(),
-      y0 = purrr::map_dbl(data, ~ .$y[1]),
-      z0 = purrr::map_dbl(data, ~ .$z[1])
-    ) %>%
-    mclust::Mclust(G = seq_len(60L), prior = mclust::priorControl())
+  if (length(names(cst)) > 3L) {
+    cst <- cst %>%
+      tibble::as_tibble() %>%
+      dplyr::transmute(
+        x0 = purrr::map_dbl(data, ~ .$x[1]) %>% abs(),
+        y0 = purrr::map_dbl(data, ~ .$y[1]),
+        z0 = purrr::map_dbl(data, ~ .$z[1])
+      )
+  }
+  mclust::Mclust(cst, G = seq_len(60L), prior = mclust::priorControl(), initialization = list(subset = 1:5000))
 }
