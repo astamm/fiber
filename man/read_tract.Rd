@@ -4,7 +4,7 @@
 \alias{read_tract}
 \title{Tract Reader}
 \usage{
-read_tract(path)
+read_tract(path, name, case, scan, side = NA_character_)
 }
 \arguments{
 \item{path}{A string indicating the path to the CSV file to be read. The CSV

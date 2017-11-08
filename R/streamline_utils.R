@@ -5,19 +5,21 @@
 #' @param ... A set of name-value pairs. Arguments are evaluated sequentially,
 #'   so you can refer to previously created variables. To be a valid tract, the
 #'   set should contain at least the fields x, y, z.
+#' @param validate A boolean specifying whether the class of the input object
+#'   should be checked (default: \code{TRUE}).
 #'
 #' @return A \code{\link{streamline}}.
 #' @export
 #' @examples
 #' st <- streamline(X = 1:10, Y = 1:10, Z = 1:10, Pie = 1:10)
-streamline <- function(...) {
-  as_streamline(tibble::lst(...))
+streamline <- function(..., validate = TRUE) {
+  as_streamline(tibble::lst(...), validate = validate)
 }
 
 #' @export
 #' @rdname streamline
-streamline_ <- function(xs) {
-  as_streamline(tibble::lst_(xs))
+streamline_ <- function(xs, validate = TRUE) {
+  as_streamline(tibble::lst_(xs), validate = validate)
 }
 
 #' Streamline Coercion
@@ -49,7 +51,7 @@ as_streamline <- function(input, validate = TRUE, ...) {
   if (!("s" %in% vars)) {
     input <- input %>%
       dplyr::mutate_at(
-        .cols = dplyr::vars(dx = x, dy = y, dz = z),
+        .vars = dplyr::vars(dx = x, dy = y, dz = z),
         .funs = dplyr::funs(. - lag(.))
       ) %>%
       tidyr::replace_na(list(dx = 0, dy = 0, dz = 0)) %>%
@@ -148,7 +150,7 @@ get_curvilinear_length <- function(streamline, validate = TRUE) {
       stop("The input dataset is not of class streamline.")
   }
 
-  max(streamline$s)
+  max(streamline$s) - min(streamline$s)
 }
 
 #' @rdname get-shape
@@ -187,7 +189,7 @@ get_curvature <- function(streamline, validate = TRUE, direction = NULL) {
         z = approx(x = .$s, y = .$z, n = n)$y
       )) %>%
       dplyr::mutate_at(
-        .cols = dplyr::vars(d2x = x, d2y = y, d2z = z),
+        .vars = dplyr::vars(d2x = x, d2y = y, d2z = z),
         .funs = dplyr::funs(dplyr::lead(.) + dplyr::lag(.) - 2 * .)
       ) %>%
       dplyr::mutate(k = (n - 1) ^ 2 * sqrt(d2x ^ 2 + d2y ^ 2 + d2z ^ 2))
@@ -274,6 +276,7 @@ get_curvature_sd <- function(streamline, validate = TRUE, direction = NULL) {
 #' str2 <- tmp$data[[2]]
 #' get_hausdorff_distance(str1, str2)
 #' get_L2_distance(str1, str2)
+#' get_L1_distance(str1, str2)
 NULL
 
 #' @rdname get-distance
@@ -306,16 +309,81 @@ get_L2_distance <- function(streamline1, streamline2) {
     streamline1 <- streamline2
     streamline2 <- str
   }
-  xfun <- approxfun(streamline2$s, streamline2$x)
-  yfun <- approxfun(streamline2$s, streamline2$y)
-  zfun <- approxfun(streamline2$s, streamline2$z)
-  opt <- optimize(cost, c(0, 2), str = streamline1,
-                  xfun = xfun, yfun = yfun, zfun = zfun)
-  opt$objective
+  aln <- align(
+    fixed_streamline = streamline1,
+    moving_streamline = streamline2,
+    cost_function = cost_L2
+  )
+  aln$objective
 }
 
-cost <- function(param, str, xfun, yfun, zfun) {
-  sqrt(mean((str$x - xfun(param[1] * str$s))^2  +
-             (str$y - yfun(param[1] * str$s))^2 +
-             (str$z - zfun(param[1] * str$s))^2, na.rm = TRUE))
+#' @rdname get-distance
+#' @export
+get_L1_distance <- function(streamline1, streamline2) {
+  if (nrow(streamline1) > nrow(streamline2)) {
+    str <- streamline1
+    streamline1 <- streamline2
+    streamline2 <- str
+  }
+  aln <- align(
+    fixed_streamline = streamline1,
+    moving_streamline = streamline2,
+    cost_function = cost_L1
+  )
+  aln$objective
+}
+
+align <- function(fixed_streamline, xfun, yfun, zfun, cost_function) {
+  optim(
+    par = c(0, 1),
+    fn = cost_function,
+    str = fixed_streamline,
+    xfun = xfun,
+    yfun = yfun,
+    zfun = zfun,
+    method = "Nelder-Mead"
+  )
+}
+
+align_streamline <- function(fixed_streamline, moving_streamline, cost_function) {
+  xfun <- approxfun(moving_streamline$s, moving_streamline$x)
+  yfun <- approxfun(moving_streamline$s, moving_streamline$y)
+  zfun <- approxfun(moving_streamline$s, moving_streamline$z)
+  fafun <- approxfun(
+    moving_streamline$s,
+    purrr::map_dbl(moving_streamline$diffusion, get_fractional_anisotropy, validate = FALSE)
+  )
+  opt <- align(fixed_streamline, xfun, yfun, zfun, cost_function)
+  a <- opt$par[2]
+  b <- opt$par[1]
+  abscissa <- a * fixed_streamline$s + b
+  streamline(
+    s = fixed_streamline$s,
+    x = xfun(abscissa),
+    y = yfun(abscissa),
+    z = zfun(abscissa),
+    fa = fafun(abscissa),
+    validate = FALSE
+  )
+}
+
+align_streamline2 <- function(fixed_streamline, moving_streamline, cost_function) {
+  xfun <- approxfun(moving_streamline$s, moving_streamline$x)
+  yfun <- approxfun(moving_streamline$s, moving_streamline$y)
+  zfun <- approxfun(moving_streamline$s, moving_streamline$z)
+  fafun <- approxfun(moving_streamline$s, moving_streamline$fa)
+  opt <- align(fixed_streamline, xfun, yfun, zfun, cost_function)
+  a <- opt$par[2]
+  b <- opt$par[1]
+  print(a)
+  print(b)
+  abscissa <- a * fixed_streamline$s + b
+  streamline(
+    s = fixed_streamline$s,
+    x = xfun(abscissa),
+    y = yfun(abscissa),
+    z = zfun(abscissa),
+    fa = fafun(abscissa),
+    validate = FALSE
+  )
 }

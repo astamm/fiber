@@ -2,95 +2,17 @@
 #' @export
 dplyr::`%>%`
 
-#' Vector-To-Tensor Representation
-#'
-#' @param vector A vector of size 6 storing the 6 unique components of a tensor.
-#' @param twice A boolean that says whether off-diagonal tensor elements were
-#'   doubled in vector representation (default: \code{FALSE}).
-#'
-#' @return A 3x3 symmetric postive definite matrix as output tensor.
+#' @importFrom rlang :=
 #' @export
-#'
-#' @examples
-#' v <- seq_len(6L)
-#' as_tensor(v)
-as_tensor <- function(vector, twice = FALSE) {
-  if (!is.numeric(vector))
-    stop("Input should be a numeric vector")
-  else {
-    if (length(vector) != 6L)
-      stop("Input should be of dimension 6")
-  }
+rlang::`:=`
 
-  xx <- vector[1]
-  yx <- vector[2]
-  yy <- vector[3]
-  zx <- vector[4]
-  zy <- vector[5]
-  zz <- vector[6]
-
-  if (twice) {
-    yx <- yx / 2
-    zx <- zx / 2
-    zy <- zy / 2
-  }
-
-  cbind(c(xx, yx, zx), c(yx, yy, zy), c(zx, zy, zz))
-}
-
-#' Diffusion Biomarkers
-#'
-#' \code{get_fractional_anisotropy} computes the fractional anisotropy of a
-#' diffusion tensor.
-#' \code{get_mean_diffusivity} computes the mean diffusivity of a diffusion tensor.
-#'
-#' @param tensor A \code{3x3} symmetric definite positive matrix.
-#' @param validate A boolean which is \code{TRUE} if the input type should be
-#'   checked or \code{FALSE} otherwise (default: \code{TRUE}).
-#'
-#' @return A scalar giving the desired diffusion biomarker extracted from the input diffusion tensor.
-#' @name get-biomarker
-#' @examples
-#' DT <- diag(c(1.71e-3, 3e-4, 1e-4))
-#' get_fractional_anisotropy(DT)
-#' get_mean_diffusivity(DT)
-NULL
-
-#' @rdname get-biomarker
+#' @importFrom rlang .data
 #' @export
-get_fractional_anisotropy <- function(tensor, validate = TRUE) {
-  if (validate) {
-    print("Do some checking on input tensor...")
-  }
+rlang::.data
 
-  m <- get_mean_diffusivity(tensor, FALSE)
-  vals <- eigen(tensor, symmetric = TRUE, only.values = TRUE)$values
-  sqrt(1.5 * sum((vals - m)^2) / sum(vals^2))
-}
-
-#' @rdname get-biomarker
+#' @importFrom roahd MBD
 #' @export
-get_mean_diffusivity <- function(tensor, validate = TRUE) {
-  if (validate) {
-    print("Do some checking on input tensor...")
-  }
-
-  mean(diag(tensor))
-}
-
-add_diffusion_information <- function(data, model = "None") {
-  switch(
-    model,
-    None = data,
-    DTI = data %>%
-      dplyr::mutate(
-        Tensors = purrr::pmap(list(`Tensors#0`, `Tensors#1`, `Tensors#2`,
-                                   `Tensors#3`,`Tensors#4`, `Tensors#5`), c) %>%
-          purrr::map(as_tensor)
-      ) %>%
-      dplyr::select(-dplyr::starts_with("Tensors#"))
-  )
-}
+roahd::MBD
 
 get_hausdorff_distance_internal <- function(point, streamline) {
   tmp <- streamline %>%
@@ -202,4 +124,23 @@ get_distance_matrix <- function(distance_vector) {
   }
   res[lower.tri(res)] <- t(res)[lower.tri(res)]
   res
+}
+
+depth_cost <- function(x, depth_data) {
+  (mean(depth_data >= x * max(depth_data)) - 0.5)^2
+}
+
+alignment_cost <- function(param, str, xfun, yfun, zfun) {
+  a <- param[2]
+  b <- param[1]
+  mean(
+    abs(str$x - xfun(a * str$s + b))  +
+      abs(str$y - yfun(a * str$s + b)) +
+      abs(str$z - zfun(a * str$s + b)),
+    na.rm = TRUE
+  )
+}
+
+is_mfData <- function(x) {
+  "mfData" %in% class(x)
 }

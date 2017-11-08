@@ -4,6 +4,12 @@
 \name{reexports}
 \alias{reexports}
 \alias{\%>\%}
+\alias{reexports}
+\alias{:=}
+\alias{reexports}
+\alias{.data}
+\alias{reexports}
+\alias{MBD}
 \title{Objects exported from other packages}
 \keyword{internal}
 \description{
@@ -12,5 +18,9 @@ below to see their documentation.
 
 \describe{
   \item{dplyr}{\code{\link[dplyr]{\%>\%}}}
+
+  \item{rlang}{\code{\link[rlang]{:=}}, \code{\link[rlang]{.data}}}
+
+  \item{roahd}{\code{\link[roahd]{MBD}}}
 }}
 

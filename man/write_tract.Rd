@@ -4,7 +4,7 @@
 \alias{write_tract}
 \title{Tract Writer}
 \usage{
-write_tract(tract, folder)
+write_tract(tract, file, ...)
 }
 \arguments{
 \item{tract}{A \code{\link{tract}}.}

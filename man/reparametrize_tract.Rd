@@ -4,18 +4,23 @@
 \alias{reparametrize_tract}
 \title{Tract Reparametrization}
 \usage{
-reparametrize_tract(tract, grid_length = NULL)
+reparametrize_tract(tract, ..., grid = 0L, validate = TRUE)
 }
 \arguments{
 \item{tract}{A \code{\link{tract}}.}
 
-\item{grid_length}{Size of the grid for uniformly distributed curvilinear
-abscissa (default: uses the mean grid size across streamlines composing the
-tract).}
+\item{grid}{Uniform grid for the curvilinear abscissa (default: \code{0L}
+which uses the average number of points across streamlines defining the
+tract). Can be specificed either as an integer in which case the abscissa
+range of each streamline is used and abscissa is uniformly resampled within
+this range or as a numeric vector that will be taken as the new common
+abscissa for all streamlines.}
+
+\item{validate}{A boolean specifying whether to check that first input is
+indeed a \code{\link{tract}}. should be checked (default: \code{TRUE}).}
 }
 \value{
-A \code{\link{tract}} with streamlines evaluated on the same uniform
-  grid.
+A \code{\link{tract}} reparametrized according to the input grid.
 }
 \description{
 Tract Reparametrization
@@ -23,7 +28,5 @@ Tract Reparametrization
 \examples{
 file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 cst_left <- read_tract(file)
-file <- system.file("extdata", "Case001_CST_Right.csv", package = "fdatractography")
-cst_right <- read_tract(file)
 reparametrize_tract(cst_left)
 }

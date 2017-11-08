@@ -4,7 +4,7 @@
 \alias{plot_tract}
 \title{Tract Plotting}
 \usage{
-plot_tract(tract)
+plot_tract(tract, transparency = 1)
 }
 \arguments{
 \item{tract}{A \code{\link{tract}} to be plotted.}

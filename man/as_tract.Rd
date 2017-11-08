@@ -2,12 +2,18 @@
 % Please edit documentation in R/tract_utils.R
 \name{as_tract}
 \alias{as_tract}
+\alias{as_tract.list}
+\alias{as_tract.tbl_df}
 \title{Tract Coercion}
 \usage{
-as_tract(list, validate = TRUE)
+as_tract(x, validate = TRUE, biomarkers = NULL)
+
+\method{as_tract}{list}(x, validate = TRUE, biomarkers = NULL)
+
+\method{as_tract}{tbl_df}(x, validate = TRUE, biomarkers = NULL)
 }
 \arguments{
-\item{list}{Input list.}
+\item{x}{Input list.}
 
 \item{validate}{A boolean specifying whether the class of the input object
 should be checked (default: \code{TRUE}).}
