@@ -150,7 +150,7 @@ get_curvilinear_length <- function(streamline, validate = TRUE) {
       stop("The input dataset is not of class streamline.")
   }
 
-  max(streamline$s)
+  max(streamline$s) - min(streamline$s)
 }
 
 #' @rdname get-shape
@@ -333,21 +333,57 @@ get_L1_distance <- function(streamline1, streamline2) {
   aln$objective
 }
 
-align <- function(fixed_streamline, moving_streamline, cost_function) {
-  xfun <- approxfun(moving_streamline$s, moving_streamline$x)
-  yfun <- approxfun(moving_streamline$s, moving_streamline$y)
-  zfun <- approxfun(moving_streamline$s, moving_streamline$z)
-  optimize(f = cost_function, interval = c(0, 2), str = fixed_streamline,
-           xfun = xfun, yfun = yfun, zfun = zfun)
+align <- function(fixed_streamline, xfun, yfun, zfun, cost_function) {
+  optim(
+    par = c(0, 1),
+    fn = cost_function,
+    str = fixed_streamline,
+    xfun = xfun,
+    yfun = yfun,
+    zfun = zfun,
+    method = "Nelder-Mead"
+  )
 }
 
 align_streamline <- function(fixed_streamline, moving_streamline, cost_function) {
-  opt <- align(fixed_streamline, moving_streamline, cost_function)
+  xfun <- approxfun(moving_streamline$s, moving_streamline$x)
+  yfun <- approxfun(moving_streamline$s, moving_streamline$y)
+  zfun <- approxfun(moving_streamline$s, moving_streamline$z)
+  fafun <- approxfun(
+    moving_streamline$s,
+    purrr::map_dbl(moving_streamline$diffusion, get_fractional_anisotropy, validate = FALSE)
+  )
+  opt <- align(fixed_streamline, xfun, yfun, zfun, cost_function)
+  a <- opt$par[2]
+  b <- opt$par[1]
+  abscissa <- a * fixed_streamline$s + b
   streamline(
-    s = moving_streamline$s / opt$minimum,
-    x = moving_streamline$x,
-    y = moving_streamline$y,
-    z = moving_streamline$z,
+    s = fixed_streamline$s,
+    x = xfun(abscissa),
+    y = yfun(abscissa),
+    z = zfun(abscissa),
+    fa = fafun(abscissa),
+    validate = FALSE
+  )
+}
+
+align_streamline2 <- function(fixed_streamline, moving_streamline, cost_function) {
+  xfun <- approxfun(moving_streamline$s, moving_streamline$x)
+  yfun <- approxfun(moving_streamline$s, moving_streamline$y)
+  zfun <- approxfun(moving_streamline$s, moving_streamline$z)
+  fafun <- approxfun(moving_streamline$s, moving_streamline$fa)
+  opt <- align(fixed_streamline, xfun, yfun, zfun, cost_function)
+  a <- opt$par[2]
+  b <- opt$par[1]
+  print(a)
+  print(b)
+  abscissa <- a * fixed_streamline$s + b
+  streamline(
+    s = fixed_streamline$s,
+    x = xfun(abscissa),
+    y = yfun(abscissa),
+    z = zfun(abscissa),
+    fa = fafun(abscissa),
     validate = FALSE
   )
 }

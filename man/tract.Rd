@@ -2,12 +2,9 @@
 % Please edit documentation in R/tract_utils.R
 \name{tract}
 \alias{tract}
-\alias{tract_}
 \title{Tract Constructor}
 \usage{
 tract(...)
-
-tract_(xs)
 }
 \arguments{
 \item{...}{A set of name-value pairs. Arguments are evaluated sequentially,

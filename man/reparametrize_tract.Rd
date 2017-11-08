@@ -2,16 +2,9 @@
 % Please edit documentation in R/tract_utils.R
 \name{reparametrize_tract}
 \alias{reparametrize_tract}
-\alias{reparametrize_tract.integer}
-\alias{reparametrize_tract.numeric}
 \title{Tract Reparametrization}
 \usage{
-reparametrize_tract(tract, grid = 0L, validate = TRUE)
-
-\method{reparametrize_tract}{integer}(tract, grid = 0L, validate = TRUE)
-
-\method{reparametrize_tract}{numeric}(tract, grid = numeric(),
-  validate = TRUE)
+reparametrize_tract(tract, ..., grid = 0L, validate = TRUE)
 }
 \arguments{
 \item{tract}{A \code{\link{tract}}.}

@@ -3,20 +3,20 @@
 \name{as_tract}
 \alias{as_tract}
 \alias{as_tract.list}
-\alias{as_tract.mfData}
+\alias{as_tract.tbl_df}
 \title{Tract Coercion}
 \usage{
-as_tract(input, ...)
+as_tract(x, validate = TRUE, biomarkers = NULL)
 
-\method{as_tract}{list}(input, validate = TRUE, ...)
+\method{as_tract}{list}(x, validate = TRUE, biomarkers = NULL)
 
-\method{as_tract}{mfData}(input, metadata, ...)
+\method{as_tract}{tbl_df}(x, validate = TRUE, biomarkers = NULL)
 }
 \arguments{
+\item{x}{Input list.}
+
 \item{validate}{A boolean specifying whether the class of the input object
 should be checked (default: \code{TRUE}).}
-
-\item{list}{Input list.}
 }
 \value{
 A \code{\link{tract}}.
