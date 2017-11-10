@@ -20,16 +20,23 @@ get_R3_invariant(x, validate = TRUE)
 checked or \code{FALSE} otherwise (default: \code{TRUE}).}
 }
 \value{
-A scalar giving the desired tensor invariant extracted from the input diffusion tensor.
+A scalar giving the desired tensor invariant extracted from the input
+  diffusion tensor.
 }
 \description{
-\code{get_fractional_anisotropy} computes the fractional anisotropy of a
-diffusion tensor.
-\code{get_mean_diffusivity} computes the mean diffusivity of a diffusion tensor.
+A set of functions calculating orthogonal tensor invariants as suggested in
+the paper by Ennis, D. B., & Kindlmann, G. (2006). Orthogonal tensor
+invariants and the analysis of diffusion tensor magnetic resonance images.
+Magnetic resonance in medicine, 55(1), 136-146.
+}
+\details{
+\code{get_K1_invariant} computes the trace of the tensor,
+\code{get_R2_invariant} computes the fractional anisotropy of the tensor and
+\code{get_R3_invariant} computes the mode of the tensor.
 }
 \examples{
 DT <- diag(c(1.71e-3, 3e-4, 1e-4))
 get_K1_invariant(DT)
 get_R2_invariant(DT)
-get_R2_invariant(DT)
+get_R3_invariant(DT)
 }

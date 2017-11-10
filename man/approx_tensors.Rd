@@ -8,8 +8,75 @@ approx_tensors(x, tensors, xout, method = "linear", n = 50, yleft, yright,
   rule = 1, f = 0, ties = mean)
 }
 \arguments{
-\item{ties}{}
+\item{x}{Numeric vector specifying the locations at which tensors are
+defined.}
+
+\item{tensors}{List of \code{tensor} objects to be interpolated.}
+
+\item{xout}{An optional set of numeric values specifying where interpolation
+is to take place.}
+
+\item{method}{Specifies the interpolation method to be used. Choices are
+"linear" [default] or "constant".}
+
+\item{n}{If \code{xout} is not specified, interpolation takes place at
+\code{n} equally spaced points spanning the interval \code{[min(x),
+max(x)]}. Default is \code{n = 50}.}
+
+\item{yleft}{The value to be returned when input \code{x} values are less
+than \code{min(x)}. The default is defined by the value of \code{rule}
+given below.}
+
+\item{yright}{The value to be returned when input \code{x} values are greater
+than \code{max(x)}. The default is defined by the value of \code{rule}
+given below.}
+
+\item{rule}{An integer (of length 1 or 2) describing how interpolation is to
+take place outside the interval \code{[min(x), max(x)]}. If \code{rule} is
+1 then \code{NA}s are returned for such points and if it is 2, the value at
+the closest data extreme is used. Use, e.g., \code{rule = 2:1}, if the left
+and right side extrapolation should differ.}
+
+\item{f}{For \code{method = "constant"}, a number between 0 and 1 inclusive,
+indicating a compromise between left- and right-continuous step functions.
+If \code{y0} and \code{y1} are the values to the left and right of the
+point then the value is \code{y0} if \code{f == 0}, \code{y1} if \code{f ==
+1}, and \code{y0*(1-f)+y1*f} for intermediate values. In this way, the
+result is right-continuous for \code{f == 0} and left-continuous for
+\code{f == 1}, even for non-finite \code{y} values.}
+
+\item{ties}{Handling of tied \code{x} values. Either a function with a single
+vector argument returning a single number result or the string
+\code{"ordered"}.}
+}
+\value{
+A \code{list} with components \code{x} and \code{y}, containing
+  \code{n} coordinates which interpolate the given data points according to
+  the \code{method} (and \code{rule}) desired.
 }
 \description{
-Tensor Interpolation
+The function \code{approx_tensors} is the analog to the
+\code{\link[stats]{approx}} function for \code{tensor}-valued data. It
+performs tensor interpolation according to the paper by Gahm, J. K.,
+Wisniewski, N., Kindlmann, G., Kung, G. L., Klug, W. S., Garfinkel, A., &
+Ennis, D. B. (2012, October). Linear invariant tensor interpolation applied
+to cardiac diffusion tensor MRI. In International Conference on Medical Image
+Computing and Computer-Assisted Intervention (pp. 494-501). Springer, Berlin,
+Heidelberg.
+}
+\examples{
+theta <- c(0, pi/6, pi/4, pi/3, pi/2)
+R <- NULL
+for (i in seq_along(theta)) {
+  th <- theta[i]
+  R[[i]] <- cbind(
+    c(cos(th), sin(th), 0),
+    c(-sin(th), cos(th), 0),
+    c(0, 0, 1)
+  )
+}
+L <- diag(c(1.7, 0.3, 0.1))
+D <- purrr::map(R, ~ . \%*\% L \%*\% t(.))
+s <- seq(0, 1, length.out = length(theta))
+approx_tensors(s, D)
 }
