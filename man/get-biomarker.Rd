@@ -20,7 +20,7 @@ get_mean_diffusivity(x)
 get_fractional_anisotropy(x)
 }
 \arguments{
-\item{tensor}{A \code{3x3} symmetric definite positive matrix.}
+\item{x}{A tensor or a streamline.}
 
 \item{validate}{A boolean which is \code{TRUE} if the input type should be
 checked or \code{FALSE} otherwise (default: \code{TRUE}).}

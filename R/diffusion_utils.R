@@ -1,65 +1,10 @@
-#' Vector-To-Tensor Representation
-#'
-#' @param vector A vector of size 6 storing the 6 unique components of a tensor.
-#' @param twice A boolean that says whether off-diagonal tensor elements were
-#'   doubled in vector representation (default: \code{FALSE}).
-#'
-#' @return A 3x3 symmetric postive definite matrix as output tensor.
-#' @export
-#'
-#' @examples
-#' v <- seq_len(6L)
-#' as_tensor(v)
-as_tensor <- function(x, validate = TRUE, ...) {
-  UseMethod("as_tensor", x)
-}
-
-#' @export
-as_tensor.matrix <- function(x, validate = TRUE, ...) {
-  if (validate) x <- validate_tensor(x)
-  class(x) <- c("tensor", class(x))
-  x
-}
-
-#' @export
-as_tensor.numeric <- function(x, validate = TRUE, ...) {
-  .as_tensor_numeric(x, validate, ...)
-}
-
-.as_tensor_numeric <- function(x, validate = TRUE, twice = FALSE, ...) {
-  if (length(x) != 6L)
-    stop("Input vector should be of dimension 6.")
-
-  xx <- x[1]
-  yx <- x[2]
-  yy <- x[3]
-  zx <- x[4]
-  zy <- x[5]
-  zz <- x[6]
-
-  if (twice) {
-    yx <- yx / 2
-    zx <- zx / 2
-    zy <- zy / 2
-  }
-
-  output_matrix <- cbind(c(xx, yx, zx), c(yx, yy, zy), c(zx, zy, zz))
-  as_tensor(output_matrix, validate)
-}
-
-is_tensor <- function(x) {
-  "tensor" %in% class(x)
-}
-
-is.tensor <- is_tensor
-
 #' Diffusion Biomarkers
 #'
 #' \code{get_fractional_anisotropy} computes the fractional anisotropy of a
 #' diffusion tensor.
 #' \code{get_mean_diffusivity} computes the mean diffusivity of a diffusion tensor.
 #'
-#' @param tensor A \code{3x3} symmetric definite positive matrix.
+#' @param x A tensor or a streamline.
 #' @param validate A boolean which is \code{TRUE} if the input type should be
 #'   checked or \code{FALSE} otherwise (default: \code{TRUE}).
 #'
@@ -191,7 +136,7 @@ add_biomarkers <- function(data, model = "None") {
         Tensors = purrr::pmap(list(`Tensors#0`, `Tensors#1`, `Tensors#2`,
                                    `Tensors#3`,`Tensors#4`, `Tensors#5`), c) %>%
           purrr::map(as_tensor) %>%
-          purrr::map(get_tensor_microstructure),
+          purrr::map(get_microstructure),
         AD = purrr::map_dbl(Tensors, "AD"),
         RD = purrr::map_dbl(Tensors, "RD"),
         MD = purrr::map_dbl(Tensors, "MD"),
@@ -199,19 +144,4 @@ add_biomarkers <- function(data, model = "None") {
       ) %>%
       dplyr::select(-dplyr::starts_with("Tensors"))
   )
-}
-
-validate_tensor <- function(tensor) {
-  d <- nrow(tensor)
-  if (d != 3L)
-    stop("Input tensor should be of dimension 3.")
-  if (ncol(tensor) != d)
-    stop("Input tensor should be a square matrix.")
-  if (!all(dplyr::near(tensor, t(tensor))))
-    stop("Input tensor should be symmetric.")
-  if (!all(eigen(tensor, symmetric = TRUE, only.values = TRUE)$values > .Machine$double.eps)) {
-    warning("Input tensor is not SDP. Applying Matrix::nearPD.")
-    tensor <- Matrix::nearPD(tensor)
-  }
-  tensor
 }

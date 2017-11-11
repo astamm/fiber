@@ -1,3 +1,112 @@
+#' Tensor Constructor
+#'
+#' This function initialize a \code{\link{tensor}} object as a 3x3 matrix proportional to the identity.
+#'
+#' @param scale The proportionality constant.
+#'
+#' @return A diagonal \code{\link{tensor}} proportional to the identity.
+#' @export
+#'
+#' @examples
+#' tensor()
+tensor <- function(scale = 1) {
+  if (scale <= .Machine$double.eps)
+    stop("The proportionality constant should be positive.")
+  as_tensor(diag(scale, 3L), validate = FALSE)
+}
+
+#' Tensor Coercion
+#'
+#' This function transforms an input numeric vector or matrix into a proper
+#' \code{\link{tensor}} object defined as a 3x3 definite positive symmetric
+#' matrix.
+#'
+#' @param x A numeric vector of size 6 storing the 6 unique components of a
+#'   tensor or a 3x3 numeric matrix.
+#' @param validate A boolean which is \code{TRUE} if the input type should be
+#'   checked or \code{FALSE} otherwise (default: \code{TRUE}).
+#' @param twice A boolean that says whether off-diagonal tensor elements were
+#'   doubled in vector representation (default: \code{FALSE}).
+#'
+#' @return A 3x3 symmetric postive definite matrix stored as a
+#'   \code{\link{tensor}} object.
+#' @export
+#'
+#' @examples
+#' v <- seq_len(6L)
+#' as_tensor(v)
+as_tensor <- function(x, validate = TRUE, ...) {
+  UseMethod("as_tensor", x)
+}
+
+#' @export
+as_tensor.matrix <- function(x, validate = TRUE, ...) {
+  if (validate) x <- validate_tensor(x)
+  class(x) <- c("tensor", class(x))
+  x
+}
+
+#' @export
+as_tensor.numeric <- function(x, validate = TRUE, ...) {
+  .as_tensor_numeric(x, validate, ...)
+}
+
+.as_tensor_numeric <- function(x, validate = TRUE, twice = FALSE, ...) {
+  if (length(x) != 6L)
+    stop("Input vector should be of dimension 6.")
+
+  xx <- x[1]
+  yx <- x[2]
+  yy <- x[3]
+  zx <- x[4]
+  zy <- x[5]
+  zz <- x[6]
+
+  if (twice) {
+    yx <- yx / 2
+    zx <- zx / 2
+    zy <- zy / 2
+  }
+
+  output_matrix <- cbind(c(xx, yx, zx), c(yx, yy, zy), c(zx, zy, zz))
+  as_tensor(output_matrix, validate)
+}
+
+validate_tensor <- function(x) {
+  d <- nrow(x)
+  if (d != 3L)
+    stop("Input tensor should be of dimension 3.")
+  if (ncol(x) != d)
+    stop("Input tensor should be a square matrix.")
+  if (!all(dplyr::near(x, t(x))))
+    stop("Input tensor should be symmetric.")
+  if (!all(eigen(x, symmetric = TRUE, only.values = TRUE)$values > .Machine$double.eps)) {
+    warning("Input tensor is not SDP. Applying Matrix::nearPD.")
+    x <- Matrix::nearPD(x)
+  }
+  x
+}
+
+#' Tensor Format Verification
+#'
+#' Check whether the input object is of class \code{\link{tensor}}.
+#'
+#' @param x An input R object.
+#'
+#' @return A boolean which is \code{TRUE} if the input object is of class
+#'  \code{\link{tensor}} and \code{FALSE} otherwise.
+#' @export
+#'
+#' @examples
+#' is_tensor(tensor())
+is.tensor <- function(x) {
+  "tensor" %in% class(x)
+}
+
+#' @rdname is.tensor
+#' @export
+is_tensor <- is.tensor
+
 #' Tensor Invariants
 #'
 #' A set of functions calculating orthogonal tensor invariants as suggested in
@@ -71,21 +180,29 @@ get_LI_eigenvalues <- function (K1, R2, R3) {
 #' Tensor Interpolation
 #'
 #' The function \code{approx_tensors} is the analog to the
-#' \code{\link[stats]{approx}} function for \code{tensor}-valued data. It
-#' performs tensor interpolation according to the paper by Gahm, J. K.,
-#' Wisniewski, N., Kindlmann, G., Kung, G. L., Klug, W. S., Garfinkel, A., &
-#' Ennis, D. B. (2012, October). Linear invariant tensor interpolation applied
-#' to cardiac diffusion tensor MRI. In International Conference on Medical Image
-#' Computing and Computer-Assisted Intervention (pp. 494-501). Springer, Berlin,
-#' Heidelberg.
+#' \code{\link[stats]{approx}} function for interpolating
+#' \code{\link{tensor}}-valued data.
+#'
+#' If \code{method == "linear"}, it performs linear tensor interpolation
+#' according to the paper by Gahm, J. K., Wisniewski, N., Kindlmann, G., Kung,
+#' G. L., Klug, W. S., Garfinkel, A., & Ennis, D. B. (2012, October). Linear
+#' invariant tensor interpolation applied to cardiac diffusion tensor MRI. In
+#' International Conference on Medical Image Computing and Computer-Assisted
+#' Intervention (pp. 494-501). Springer, Berlin, Heidelberg. If \code{method ==
+#' "log"}, it performs log-Euclidean tensor interpolation according to the paper
+#' by Arsigny, V., Fillard, P., Pennec, X. and Ayache, N. (2006) ‘Log-Euclidean
+#' metrics for fast and simple calculus on diffusion tensors.’, Magnetic
+#' resonance in medicine : official journal of the Society of Magnetic Resonance
+#' in Medicine / Society of Magnetic Resonance in Medicine, 56(2), pp. 411–21.
+#' doi: 10.1002/mrm.20965.
 #'
 #' @param x Numeric vector specifying the locations at which tensors are
 #'   defined.
-#' @param tensors List of \code{tensor} objects to be interpolated.
+#' @param tensors List of \code{\link{tensor}} objects to be interpolated.
 #' @param xout An optional set of numeric values specifying where interpolation
 #'   is to take place.
 #' @param method Specifies the interpolation method to be used. Choices are
-#'   "linear" [default] or "constant".
+#'   "linear" [default] or "log" for interpolating in the log-Euclidean space.
 #' @param n If \code{xout} is not specified, interpolation takes place at
 #'   \code{n} equally spaced points spanning the interval \code{[min(x),
 #'   max(x)]}. Default is \code{n = 50}.
@@ -100,13 +217,6 @@ get_LI_eigenvalues <- function (K1, R2, R3) {
 #'   1 then \code{NA}s are returned for such points and if it is 2, the value at
 #'   the closest data extreme is used. Use, e.g., \code{rule = 2:1}, if the left
 #'   and right side extrapolation should differ.
-#' @param f For \code{method = "constant"}, a number between 0 and 1 inclusive,
-#'   indicating a compromise between left- and right-continuous step functions.
-#'   If \code{y0} and \code{y1} are the values to the left and right of the
-#'   point then the value is \code{y0} if \code{f == 0}, \code{y1} if \code{f ==
-#'   1}, and \code{y0*(1-f)+y1*f} for intermediate values. In this way, the
-#'   result is right-continuous for \code{f == 0} and left-continuous for
-#'   \code{f == 1}, even for non-finite \code{y} values.
 #' @param ties Handling of tied \code{x} values. Either a function with a single
 #'   vector argument returning a single number result or the string
 #'   \code{"ordered"}.
@@ -131,35 +241,79 @@ get_LI_eigenvalues <- function (K1, R2, R3) {
 #' D <- purrr::map(R, ~ . %*% L %*% t(.))
 #' s <- seq(0, 1, length.out = length(theta))
 #' approx_tensors(s, D)
+#' approx_tensors(s, D, method = "log")
 approx_tensors <- function(x, tensors, xout, method = "linear", n = 50, yleft,
-                           yright, rule = 1, f = 0, ties = mean) {
+                           yright, rule = 1, ties = mean) {
+  if (method == "log")
+    tensors <- purrr::map(tensors, tensor_log)
+
   out <- NULL
   for (i in 1:3) {
     for (j in 1:i) {
       y <- purrr::map_dbl(tensors, `[`, i, j)
-      out[[length(out) + 1]] <- approx(x, y, xout, method, n, yleft, yright, rule, f, ties)$y
+      out[[length(out) + 1]] <- approx(x, y, xout, "linear", n, yleft, yright, rule, 0, ties)
     }
   }
 
   R <- out %>%
+    purrr::map("y") %>%
     purrr::transpose() %>%
     purrr::map(purrr::flatten_dbl) %>%
-    purrr::map(as_tensor, validate = FALSE) %>%
-    purrr::map(~ eigen(., symmetric = TRUE)$vectors)
+    purrr::map(as_tensor, validate = FALSE)
 
+  if (method == "log") {
+    return(list(
+      x = out[[1]]$x,
+      y = purrr::map(R, tensor_exp, validate = FALSE) %>%
+        purrr::map(as_tensor, validate = FALSE)
+    ))
+  }
+
+  R <- purrr::map(R, ~ eigen(., symmetric = TRUE)$vectors)
   tmp <- purrr::map(tensors, get_tensor_invariants, validate = FALSE)
   K1 <- purrr::map_dbl(tmp, "K1")
-  K1 <- approx(x, K1, xout, method, n, yleft, yright, rule, f, ties)$y
+  K1 <- approx(x, K1, xout, "linear", n, yleft, yright, rule, 0, ties)$y
   R2 <- purrr::map_dbl(tmp, "R2")
-  R2 <- approx(x, R2, xout, method, n, yleft, yright, rule, f, ties)$y
+  R2 <- approx(x, R2, xout, "linear", n, yleft, yright, rule, 0, ties)$y
   R3 <- purrr::map_dbl(tmp, "R3")
-  tmp <- approx(x, R3, xout, method, n, yleft, yright, rule, f, ties)
-  R3 <- tmp$y
+  R3 <- approx(x, R3, xout, "linear", n, yleft, yright, rule, 0, ties)$y
   L <- purrr::pmap(list(K1, R2, R3), get_LI_eigenvalues)
 
   list(
-    x = tmp$x,
+    x = out[[1]]$x,
     y = purrr::map2(R, L, ~ .x %*% diag(.y) %*% t(.x)) %>%
       purrr::map(as_tensor, validate = FALSE)
   )
+}
+
+#' Tensor Exponentiation and Logarithm
+#'
+#' @param x A tensor.
+#' @param validate A boolean which is \code{TRUE} if the input type should be
+#'   checked or \code{FALSE} otherwise (default: \code{TRUE}).
+#'
+#' @return A 3x3 symmetric matrix which is the exponential of the input in the
+#'   case of \code{tensor_exp} or the logarithm of the input in the case of
+#'   \code{tensor_log}.
+#' @name tensor-logexp
+#'
+#' @examples
+#' tensor_exp(tensor())
+#' tensor_log(tensor())
+NULL
+
+#' @rdname tensor-logexp
+#' @export
+tensor_exp <- function(x, validate = TRUE) {
+  if (validate) x <- validate_tensor(x)
+  eig <- eigen(x, symmetric = TRUE)
+  eig$vectors %*% diag(exp(eig$values)) %*% t(eig$vectors)
+}
+
+#' @rdname tensor-logexp
+#' @export
+tensor_log <- function(x, validate = TRUE) {
+  if (validate) x <- validate_tensor(x)
+  eig <- eigen(x, symmetric = TRUE)
+  eig$vectors %*% diag(log(eig$values)) %*% t(eig$vectors)
 }

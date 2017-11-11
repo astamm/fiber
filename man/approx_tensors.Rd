@@ -5,19 +5,19 @@
 \title{Tensor Interpolation}
 \usage{
 approx_tensors(x, tensors, xout, method = "linear", n = 50, yleft, yright,
-  rule = 1, f = 0, ties = mean)
+  rule = 1, ties = mean)
 }
 \arguments{
 \item{x}{Numeric vector specifying the locations at which tensors are
 defined.}
 
-\item{tensors}{List of \code{tensor} objects to be interpolated.}
+\item{tensors}{List of \code{\link{tensor}} objects to be interpolated.}
 
 \item{xout}{An optional set of numeric values specifying where interpolation
 is to take place.}
 
 \item{method}{Specifies the interpolation method to be used. Choices are
-"linear" [default] or "constant".}
+"linear" [default] or "log" for interpolating in the log-Euclidean space.}
 
 \item{n}{If \code{xout} is not specified, interpolation takes place at
 \code{n} equally spaced points spanning the interval \code{[min(x),
@@ -37,14 +37,6 @@ take place outside the interval \code{[min(x), max(x)]}. If \code{rule} is
 the closest data extreme is used. Use, e.g., \code{rule = 2:1}, if the left
 and right side extrapolation should differ.}
 
-\item{f}{For \code{method = "constant"}, a number between 0 and 1 inclusive,
-indicating a compromise between left- and right-continuous step functions.
-If \code{y0} and \code{y1} are the values to the left and right of the
-point then the value is \code{y0} if \code{f == 0}, \code{y1} if \code{f ==
-1}, and \code{y0*(1-f)+y1*f} for intermediate values. In this way, the
-result is right-continuous for \code{f == 0} and left-continuous for
-\code{f == 1}, even for non-finite \code{y} values.}
-
 \item{ties}{Handling of tied \code{x} values. Either a function with a single
 vector argument returning a single number result or the string
 \code{"ordered"}.}
@@ -56,13 +48,22 @@ A \code{list} with components \code{x} and \code{y}, containing
 }
 \description{
 The function \code{approx_tensors} is the analog to the
-\code{\link[stats]{approx}} function for \code{tensor}-valued data. It
-performs tensor interpolation according to the paper by Gahm, J. K.,
-Wisniewski, N., Kindlmann, G., Kung, G. L., Klug, W. S., Garfinkel, A., &
-Ennis, D. B. (2012, October). Linear invariant tensor interpolation applied
-to cardiac diffusion tensor MRI. In International Conference on Medical Image
-Computing and Computer-Assisted Intervention (pp. 494-501). Springer, Berlin,
-Heidelberg.
+\code{\link[stats]{approx}} function for interpolating
+\code{\link{tensor}}-valued data.
+}
+\details{
+If \code{method == "linear"}, it performs linear tensor interpolation
+according to the paper by Gahm, J. K., Wisniewski, N., Kindlmann, G., Kung,
+G. L., Klug, W. S., Garfinkel, A., & Ennis, D. B. (2012, October). Linear
+invariant tensor interpolation applied to cardiac diffusion tensor MRI. In
+International Conference on Medical Image Computing and Computer-Assisted
+Intervention (pp. 494-501). Springer, Berlin, Heidelberg. If \code{method ==
+"log"}, it performs log-Euclidean tensor interpolation according to the paper
+by Arsigny, V., Fillard, P., Pennec, X. and Ayache, N. (2006) ‘Log-Euclidean
+metrics for fast and simple calculus on diffusion tensors.’, Magnetic
+resonance in medicine : official journal of the Society of Magnetic Resonance
+in Medicine / Society of Magnetic Resonance in Medicine, 56(2), pp. 411–21.
+doi: 10.1002/mrm.20965.
 }
 \examples{
 theta <- c(0, pi/6, pi/4, pi/3, pi/2)
@@ -79,4 +80,5 @@ L <- diag(c(1.7, 0.3, 0.1))
 D <- purrr::map(R, ~ . \%*\% L \%*\% t(.))
 s <- seq(0, 1, length.out = length(theta))
 approx_tensors(s, D)
+approx_tensors(s, D, method = "log")
 }
