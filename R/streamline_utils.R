@@ -387,3 +387,51 @@ align_streamline2 <- function(fixed_streamline, moving_streamline, cost_function
     validate = FALSE
   )
 }
+
+#' Streamline Plotting
+#'
+#' This function plots a strewamline in 3D using the \code{rgl} package. If
+#' diffusion tensor information is available, it is also plotted as ellipsoids
+#' at each point of the streamline.
+#'
+#' @param streamline A \code{\link{streamline}} object.
+#' @param validate A boolean specifying whether the class of the input object
+#'   should be checked (default: \code{TRUE}).
+#' @param plot_microstructure A boolean specifying if microstruture should be
+#'   superimposed on the displayed \code{\link{streamline}}s.
+#' @param new_window A boolean specifying whether a new graphical window should
+#'   be used (default: \code{TRUE}).
+#' @param ... Additional plotting parameters to be passed to \code{rgl} basic
+#'   plotting functions.
+#'
+#' @return The function is used for its side effect of plotting.
+#' @export
+#'
+#' @examples
+plot_streamline <- function(streamline, validate = TRUE, plot_microstructure = FALSE, new_window = TRUE, ...) {
+  if (validate)
+    if (!is_streamline(streamline))
+      stop("The input object to be plotted should be of class streamline.")
+
+  if (new_window) rgl::open3d()
+  rgl::lines3d(x = streamline$x, y = streamline$y, z = streamline$z, ...)
+
+  if (plot_microstructure) {
+    size <- get_curvilinear_length(streamline)
+    npts <- nrow(streamline)
+    scl <- 4 * size / npts
+
+    if ("t" %in% names(streamline)) {
+      for (i in 1:npts)
+        rgl::plot3d(
+          rgl::ellipse3d(
+            streamline$t[[i]],
+            centre = c(streamline$x[[i]], streamline$y[[i]], streamline$z[[i]]),
+            scale = rep(scl, 3L)
+          ),
+          add = TRUE,
+          ...
+        )
+    }
+  }
+}
