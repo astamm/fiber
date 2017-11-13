@@ -1173,3 +1173,48 @@ cluster_cst <- function(cst, validate = TRUE) {
   }
   mclust::Mclust(cst, G = seq_len(60L), prior = mclust::priorControl(), initialization = list(subset = 1:5000))
 }
+
+mean_tract <- function(x, ...) {
+  mean_streamline <- x$data %>%
+    purrr::map(
+      dplyr::mutate,
+      eigenvalues = purrr::map(t, eigen_if),
+      dpara = purrr::map_dbl(eigenvalues, 1),
+      dperp = purrr::map_dbl(eigenvalues, 2)
+    ) %>%
+    purrr::map(dplyr::select, s, x, y, z, dpara, dperp) %>%
+    purrr::reduce(`+`)
+  mean_streamline <- mean_streamline / length(x$data)
+  mean_streamline %>%
+    dplyr::mutate_at(
+      dplyr::vars(dx = x, dy = y, dz = z),
+      dplyr::funs(compute_tangent)
+    ) %>%
+    dplyr::mutate(tangent = purrr::pmap(list(dx, dy, dz), c)) %>%
+    dplyr::select(-dx, -dy, -dz) %>%
+    dplyr::mutate(t = purrr::pmap(list(tangent, dpara, dperp), form_tensor)) %>%
+    dplyr::select(s, x, y, z, t) %>%
+    as_streamline()
+}
+
+compute_tangent <- function(x) {
+  t <- x - dplyr::lag(x)
+  t[1] <- t[2]
+  t
+}
+
+eigen_if <- function(x) {
+  if (is.na(x[1, 1])) return(c(1.71, 0.2) * 0.001)
+  vals <- eigen(x, symmetric = TRUE, only.values = TRUE)$values
+  dpara <- vals[1]
+  if (dpara > 2.1e-3) return(c(1.71, 0.2) * 0.001)
+  dperp <- mean(vals[-1])
+  if (dperp < 1e-5) return(c(1.71, 0.2) * 0.001)
+  c(dpara, dperp)
+}
+
+form_tensor <- function(mu, lambda_para, lambda_perp) {
+  output <- diag(lambda_perp, 3L) + (lambda_para - lambda_perp) * mu %*% t(mu)
+  as_tensor(output, validate = FALSE)
+}
+

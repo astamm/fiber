@@ -5,7 +5,7 @@
 \title{Streamline Plotting}
 \usage{
 plot_streamline(streamline, validate = TRUE, plot_microstructure = FALSE,
-  new_window = TRUE, ...)
+  new_window = TRUE, scale = 4, ...)
 }
 \arguments{
 \item{streamline}{A \code{\link{streamline}} object.}
@@ -18,6 +18,8 @@ superimposed on the displayed \code{\link{streamline}}s.}
 
 \item{new_window}{A boolean specifying whether a new graphical window should
 be used (default: \code{TRUE}).}
+
+\item{scale}{A scalar that handles the ellipsoid scale (default: 4).}
 
 \item{...}{Additional plotting parameters to be passed to \code{rgl} basic
 plotting functions.}

@@ -401,6 +401,7 @@ align_streamline2 <- function(fixed_streamline, moving_streamline, cost_function
 #'   superimposed on the displayed \code{\link{streamline}}s.
 #' @param new_window A boolean specifying whether a new graphical window should
 #'   be used (default: \code{TRUE}).
+#' @param scale A scalar that handles the ellipsoid scale (default: 4).
 #' @param ... Additional plotting parameters to be passed to \code{rgl} basic
 #'   plotting functions.
 #'
@@ -408,7 +409,7 @@ align_streamline2 <- function(fixed_streamline, moving_streamline, cost_function
 #' @export
 #'
 #' @examples
-plot_streamline <- function(streamline, validate = TRUE, plot_microstructure = FALSE, new_window = TRUE, ...) {
+plot_streamline <- function(streamline, validate = TRUE, plot_microstructure = FALSE, new_window = TRUE, scale = 4, ...) {
   if (validate)
     if (!is_streamline(streamline))
       stop("The input object to be plotted should be of class streamline.")
@@ -417,11 +418,10 @@ plot_streamline <- function(streamline, validate = TRUE, plot_microstructure = F
   rgl::lines3d(x = streamline$x, y = streamline$y, z = streamline$z, ...)
 
   if (plot_microstructure) {
-    size <- get_curvilinear_length(streamline)
-    npts <- nrow(streamline)
-    scl <- 4 * size / npts
-
     if ("t" %in% names(streamline)) {
+      size <- get_curvilinear_length(streamline)
+      npts <- nrow(streamline)
+      scl <- scale * size / npts
       for (i in 1:npts)
         rgl::plot3d(
           rgl::ellipse3d(
