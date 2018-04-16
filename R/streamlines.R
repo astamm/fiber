@@ -28,9 +28,9 @@ streamline <- function(..., validate = TRUE) {
 #' @export
 #'
 #' @examples
-#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
-#' cst_left <- read_tract(file)
-#' as_streamline(cst_left$data[[1]])
+#' file <- system.file("extdata", "CC_SingleTensor.csv", package = "fiber")
+#' cc <- read_tract(file)
+#' as_streamline(cc$data[[1]])
 as_streamline <- function(input, validate = TRUE, ...) {
   names(input) <- stringr::str_to_lower(names(input))
   vars <- names(input)
@@ -71,9 +71,9 @@ as_streamline <- function(input, validate = TRUE, ...) {
 #' @export
 #'
 #' @examples
-#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
-#' cst_left <- read_tract(file)
-#' is_streamline(cst_left$data[[1]])
+#' file <- system.file("extdata", "CC_SingleTensor.csv", package = "fiber")
+#' cc <- read_tract(file)
+#' is_streamline(cc$data[[1]])
 is_streamline <- function(x) {
   "streamline" %in% class(x)
 }
@@ -104,9 +104,9 @@ is_streamline <- function(x) {
 #'   \code{\link[tibble]{tibble}}.
 #' @name get-shape
 #' @examples
-#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
-#' cst_left <- read_tract(file)
-#' st <- cst_left$data[[1]]
+#' file <- system.file("extdata", "CC_SingleTensor.csv", package = "fiber")
+#' cc <- read_tract(file)
+#' st <- cc$data[[1]]
 #' get_euclidean_length(st)
 #' get_curvilinear_length(st)
 #' get_sinuosity(st)
@@ -157,36 +157,61 @@ get_sinuosity <- function(streamline, validate = TRUE) {
   cl / el
 }
 
+myeval <- function(model, test) {
+  test <- test %>%
+    tibble::as_tibble() %>%
+    dplyr::filter(s >= model$basis$rangeval[1], s <= model$basis$rangeval[2])
+  obs <- as.matrix(test[, 2:4])
+  pred <- fda::eval.fd(test$s, model)
+  norm(obs - pred, "F")
+}
+
+cost_gcv <- function(x, st) {
+  cv <- modelr::crossv_mc(st, 100)
+  models <- purrr::map(cv$train, cost_fit, x = x)
+  errors <- purrr::map2_dbl(models, cv$test, myeval)
+  mean(errors)
+}
+
+cost_fit <- function(st, x) {
+  st <- tibble::as_tibble(st)
+  grid <- st$s
+  data <- array(dim = c(length(grid), 1L, 3L))
+  data <- matrix(0, nrow = length(grid), 3L)
+  data[, 1] <- st$x
+  data[, 2] <- st$y
+  data[, 3] <- st$z
+  fda::Data2fd(grid, data, basisobj = 5L, lambda = x)
+}
+
 #' @rdname get-shape
 #' @export
-get_curvature <- function(streamline, validate = TRUE) {
+get_curvature <- function(st, validate = TRUE) {
   if (validate)
-    if (!is_streamline(streamline))
+    if (!is_streamline(st))
       stop("The input dataset is not of class streamline.")
 
-  n <- nrow(streamline)
+  grid <- st$s
+  data <- array(dim = c(length(grid), 1L, 3L))
+  data <- matrix(0, nrow = length(grid), 3L)
+  data[, 1] <- st$x
+  data[, 2] <- st$y
+  data[, 3] <- st$z
 
-  streamline %>%
-    dplyr::do(dplyr::tibble(
-      s = .$s,
-      x = approx(x = .$s, y = .$x, n = n)$y,
-      y = approx(x = .$s, y = .$y, n = n)$y,
-      z = approx(x = .$s, y = .$z, n = n)$y
-    )) %>%
-    dplyr::mutate_at(
-      .vars = dplyr::vars(dx = x, dy = y, dz = z),
-      .funs = dplyr::funs((dplyr::lead(.) - dplyr::lag(.)) / 2)
-    ) %>%
-    dplyr::mutate_at(
-      .vars = dplyr::vars(d2x = x, d2y = y, d2z = z),
-      .funs = dplyr::funs((dplyr::lead(.) + dplyr::lag(.) - 2 * .) / 2)
-    ) %>%
-    dplyr::mutate(
-      k = sqrt( ( (d2z * dy - d2y * dz)^2 + (d2x * dz - d2z * dx)^2 + (d2y * dx - d2x * dy)^2 )
-                / (dx^2 + dy^2 + dz^2)^3 )
-    ) %>%
-    dplyr::select(s, k) %>%
-    tidyr::drop_na()
+  lambda_opt <- optimise(cost_gcv, c(1e-6, 100), st = st)$minimum
+  writeLines(paste("Optimal roughness penalization (minimal GCV):", lambda_opt))
+  fd <- fda::Data2fd(grid, data, basisobj = 5L, lambda = lambda_opt)
+  d1 <- fda::eval.fd(grid, fd, Lfdobj = 1)
+  d2 <- fda::eval.fd(grid, fd, Lfdobj = 2)
+  dx <- d1[, 1]
+  dy <- d1[, 2]
+  dz <- d1[, 3]
+  d2x <- d2[, 1]
+  d2y <- d2[, 2]
+  d2z <- d2[, 3]
+  k <- sqrt( ( (d2z * dy - d2y * dz)^2 + (d2x * dz - d2z * dx)^2 + (d2y * dx - d2x * dy)^2 )
+             / (dx^2 + dy^2 + dz^2)^3 )
+  tibble::tibble(s = grid, curv = k)
 }
 
 #' @rdname get-shape
@@ -236,9 +261,9 @@ get_curvature_sd <- function(streamline, validate = TRUE) {
 #'   streamlines.
 #' @name get-distance
 #' @examples
-#' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
-#' cst_left <- read_tract(file)
-#' tmp <- reparametrize_tract(cst_left, grid_length = 50L)
+#' file <- system.file("extdata", "CC_SingleTensor.csv", package = "fiber")
+#' cc <- read_tract(file)
+#' tmp <- reparametrize_tract(cc, grid_length = 50L)
 #' str1 <- tmp$data[[1]]
 #' str2 <- tmp$data[[2]]
 #' get_hausdorff_distance(str1, str2)

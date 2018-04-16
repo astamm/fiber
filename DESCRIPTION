@@ -1,4 +1,4 @@
-Package: fdatractography
+Package: fiber
 Type: Package
 Title: Functional Data Analysis for Tractography in R
 Version: 0.0.0.9000

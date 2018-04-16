@@ -46,20 +46,11 @@ as_tract.list <- function(x, validate = TRUE, biomarkers = NULL) {
     if (!is.list(x))
       stop("First input should be a list.")
 
-    if (!all(c("name", "case", "scan", "side", "data") %in% names(x)))
-      stop("Input list should contain fields name, case, scan, and side.")
+    if (!all(c("id", "data") %in% names(x)))
+      stop("Input list should contain fields id and data.")
 
-    if (!is.character(x$name))
-      stop("The name field should be formatted as string.")
-
-    if (!is.character(x$case))
-      stop("The case field should be formatted as string.")
-
-    if (!is.character(x$scan))
-      stop("The scan field should be formatted as string.")
-
-    if (!is.character(x$side))
-      stop("The side field should be formatted as string.")
+    if (!is.integer(x$id))
+      stop("The id field should be formatted as integer.")
 
     if (!is.list(x$data))
       stop("The data field shoubd be a list.")
@@ -69,45 +60,12 @@ as_tract.list <- function(x, validate = TRUE, biomarkers = NULL) {
       str <- x$data[[i]]
       if (!is_streamline(str)) {
         all_streamline <- FALSE
-        break
+        break()
       }
     }
 
-    if (!all_streamline && !is_mfData(x$data))
-      stop("The data list should contain only streamline or mfData objects.")
-  }
-
-  # TO DO: How to handle presence of biomarkers in mfData?
-  if (is_mfData(x$data)) {
-    streamlines <- x$data
-    s <- seq(streamlines$t0, streamlines$tP, length.out = streamlines$P)
-    N <- streamlines$N
-    L <- streamlines$L
-
-    if (L < 3L)
-      stop("mfData object should at least contain the 3D coordinate positions of the streamline points.")
-
-    streamlines <- seq_len(N) %>%
-      purrr::map(~ streamline(
-        s = s,
-        x = as.numeric(streamlines$fDList[[1]]$values[., ]),
-        y = as.numeric(streamlines$fDList[[2]]$values[., ]),
-        z = as.numeric(streamlines$fDList[[3]]$values[., ])
-      ))
-
-    if (!is.null(biomarkers)) {
-      B <- length(biomarkers)
-      if (B + 3 != L)
-        stop("The number of requested biomarkers differs from the number of biomarkers in the mfData object.")
-      for (i in 1:N) {
-        str <- streamlines[[i]]
-        for (j in 1:B)
-          str[[biomarkers[i]]] <- as.numeric(streamlines$fDList[[3+j]]$values[i, ])
-        streamlines[[i]] <- str
-      }
-    }
-
-    x$data <- streamlines
+    if (!all_streamline)
+      stop("The data list should contain only streamline objects.")
   }
 
   x <- tibble::as_tibble(x)
@@ -137,13 +95,9 @@ as_tract.tbl_df <- function(x, validate = TRUE, biomarkers = NULL) {
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
 #' is_tract(cst_left)
-is.tract <- function(object) {
+is_tract <- function(object) {
   "tract" %in% class(object)
 }
-
-#' @export
-#' @rdname is.tract
-is_tract <- is.tract
 
 #' Tract Reader
 #'
@@ -169,48 +123,15 @@ read_tract <- function(path, name, case, scan, side = NA_character_) {
     stop("The CSV file should contain at least the variables X, Y, Z, PointId and StreamelineId.")
 
   if (nrow(data) == 0)
-    return(tract(
-      name = name,
-      case = case,
-      scan = scan,
-      side = side,
-      data = list()
-    ))
+    stop("Data sheet is empty.")
 
-  model <- "None"
-  check_dti <- data %>%
-    names() %>%
-    stringr::str_locate("Tensors#") %>%
-    tibble::as_tibble() %>%
-    tidyr::drop_na() %>%
-    nrow()
-  if (check_dti == 6L)
-    model <- "DTI"
-
-  # data <- data %>%
-  #   dplyr::arrange(StreamlineId, PointId) %>%
-  #   add_biomarkers(model)
-
-  # data <- switch(
-  #   model,
-  #   None = data %>%
-  #     dplyr::group_by(StreamlineId) %>%
-  #     dplyr::do(streamlines = streamline(
-  #       x = .$X, y = .$Y, z = .$Z
-  #     )) %>%
-  #     dplyr::ungroup(),
-  #   DTI = data %>%
-  #     dplyr::group_by(StreamlineId) %>%
-  #     dplyr::do(streamlines = streamline(
-  #       x = .$X, y = .$Y, z = .$Z,
-  #       AD = .$AD, RD = .$RD, MD = .$MD, FA = .$FA
-  #     )) %>%
-  #     dplyr::ungroup()
-  # )
-  #
-  # tract(name = name, case = case, scan = scan, side = side, data = data$streamlines)
-
-  data
+  data %>%
+    dplyr::arrange(StreamlineId, PointId) %>%
+    dplyr::select(-PointId) %>%
+    tidyr::nest(-StreamlineId) %>%
+    dplyr::rename(id = StreamlineId) %>%
+    dplyr::mutate(data = purrr::map(data, as_streamline)) %>%
+    as_tract()
 }
 
 #' Tract Writer
