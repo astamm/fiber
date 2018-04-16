@@ -14,14 +14,14 @@ rlang::.data
 #' @export
 roahd::MBD
 
-get_hausdorff_distance_internal <- function(point, streamline) {
-  tmp <- streamline %>%
+get_hausdorff_distance_impl <- function(point, streamline) {
+  streamline %>%
     dplyr::mutate(
-      Points = purrr::pmap(list(x, y, z), c),
-      dist = purrr::map_dbl(Points, ~ sqrt(sum((. - point)^2)))
+      distance = purrr::pmap(list(x, y, z), c) %>%
+        purrr::map_dbl(~ sqrt(sum((. - point)^2)))
     ) %>%
-    dplyr::summarise(dist = min(dist))
-  tmp$dist
+    dplyr::summarise(dist = min(dist)) %>%
+    dplyr::pull(distance)
 }
 
 #' Tract Clustering

@@ -16,12 +16,6 @@ streamline <- function(..., validate = TRUE) {
   as_streamline(tibble::lst(...), validate = validate)
 }
 
-#' @export
-#' @rdname streamline
-streamline_ <- function(xs, validate = TRUE) {
-  as_streamline(tibble::lst_(xs), validate = validate)
-}
-
 #' Streamline Coercion
 #'
 #' Coerces a dataset into a \code{\link{streamline}}.
@@ -80,13 +74,9 @@ as_streamline <- function(input, validate = TRUE, ...) {
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
 #' is_streamline(cst_left$data[[1]])
-is.streamline <- function(x) {
+is_streamline <- function(x) {
   "streamline" %in% class(x)
 }
-
-#' @export
-#' @rdname is.streamline
-is_streamline <- is.streamline
 
 #' Shape Characteristics of a Streamline
 #'
@@ -169,72 +159,53 @@ get_sinuosity <- function(streamline, validate = TRUE) {
 
 #' @rdname get-shape
 #' @export
-get_curvature <- function(streamline, validate = TRUE, direction = NULL) {
-  if (validate) {
+get_curvature <- function(streamline, validate = TRUE) {
+  if (validate)
     if (!is_streamline(streamline))
       stop("The input dataset is not of class streamline.")
-    if (!(is.null(direction) ||
-          stringr::str_to_lower(direction) %in% c("x", "y", "z")))
-      stop("Possible choices for direction argument are NULL (3D curvature), x, y or z.")
-  }
 
   n <- nrow(streamline)
 
-  if (is.null(direction)) {
-    streamline <- streamline %>%
-      dplyr::do(dplyr::tibble(
-        s = .$s,
-        x = approx(x = .$s, y = .$x, n = n)$y,
-        y = approx(x = .$s, y = .$y, n = n)$y,
-        z = approx(x = .$s, y = .$z, n = n)$y
-      )) %>%
-      dplyr::mutate_at(
-        .vars = dplyr::vars(d2x = x, d2y = y, d2z = z),
-        .funs = dplyr::funs(dplyr::lead(.) + dplyr::lag(.) - 2 * .)
-      ) %>%
-      dplyr::mutate(k = (n - 1) ^ 2 * sqrt(d2x ^ 2 + d2y ^ 2 + d2z ^ 2))
-  } else {
-    streamline <- streamline %>%
-      dplyr::do(dplyr::tibble(s = .$s,
-                              direction = approx(
-                                x = .$s, y = .[[direction]], n = n
-                              )$y)) %>%
-      dplyr::mutate(
-        d2 = dplyr::lead(direction) + dplyr::lag(direction) - 2 * direction,
-        k = (n - 1) ^ 2 * abs(d2)
-      )
-  }
-
   streamline %>%
+    dplyr::do(dplyr::tibble(
+      s = .$s,
+      x = approx(x = .$s, y = .$x, n = n)$y,
+      y = approx(x = .$s, y = .$y, n = n)$y,
+      z = approx(x = .$s, y = .$z, n = n)$y
+    )) %>%
+    dplyr::mutate_at(
+      .vars = dplyr::vars(dx = x, dy = y, dz = z),
+      .funs = dplyr::funs((dplyr::lead(.) - dplyr::lag(.)) / 2)
+    ) %>%
+    dplyr::mutate_at(
+      .vars = dplyr::vars(d2x = x, d2y = y, d2z = z),
+      .funs = dplyr::funs((dplyr::lead(.) + dplyr::lag(.) - 2 * .) / 2)
+    ) %>%
+    dplyr::mutate(
+      k = sqrt( ( (d2z * dy - d2y * dz)^2 + (d2x * dz - d2z * dx)^2 + (d2y * dx - d2x * dy)^2 )
+                / (dx^2 + dy^2 + dz^2)^3 )
+    ) %>%
     dplyr::select(s, k) %>%
     tidyr::drop_na()
 }
 
 #' @rdname get-shape
 #' @export
-get_curvature_max <- function(streamline, validate = TRUE, direction = NULL) {
-  if (validate) {
+get_curvature_max <- function(streamline, validate = TRUE) {
+  if (validate)
     if (!is_streamline(streamline))
       stop("The input dataset is not of class streamline.")
-    if (!(is.null(direction) ||
-          stringr::str_to_lower(direction) %in% c("x", "y", "z")))
-      stop("Possible choices for direction argument are NULL (3D curvature), x, y or z.")
-  }
 
-  curvature <- get_curvature(streamline, FALSE, direction)
+  curvature <- get_curvature(streamline, FALSE)
   max(curvature$k)
 }
 
 #' @rdname get-shape
 #' @export
-get_curvature_mean <- function(streamline, validate = TRUE, direction = NULL) {
-  if (validate) {
+get_curvature_mean <- function(streamline, validate = TRUE) {
+  if (validate)
     if (!is_streamline(streamline))
       stop("The input dataset is not of class streamline.")
-    if (!(is.null(direction) ||
-          stringr::str_to_lower(direction) %in% c("x", "y", "z")))
-      stop("Possible choices for direction argument are NULL (3D curvature), x, y or z.")
-  }
 
   curvature <- get_curvature(streamline, FALSE, direction)
   mean(curvature$k)
@@ -242,14 +213,10 @@ get_curvature_mean <- function(streamline, validate = TRUE, direction = NULL) {
 
 #' @rdname get-shape
 #' @export
-get_curvature_sd <- function(streamline, validate = TRUE, direction = NULL) {
-  if (validate) {
+get_curvature_sd <- function(streamline, validate = TRUE) {
+  if (validate)
     if (!is_streamline(streamline))
       stop("The input dataset is not of class streamline.")
-    if (!(is.null(direction) ||
-          stringr::str_to_lower(direction) %in% c("x", "y", "z")))
-      stop("Possible choices for direction argument are NULL (3D curvature), x, y or z.")
-  }
 
   curvature <- get_curvature(streamline, FALSE, direction)
   sd(curvature$k)
@@ -282,23 +249,23 @@ NULL
 #' @rdname get-distance
 #' @export
 get_hausdorff_distance <- function(streamline1, streamline2) {
-  tmp <- streamline1 %>%
+  dist1 <- streamline1 %>%
     dplyr::mutate(
-      Points = purrr::pmap(list(x, y, z), c),
-      dist = purrr::map_dbl(Points, get_hausdorff_distance_internal, streamline2)
+      dist = purrr::pmap(list(x, y, z), c) %>%
+        purrr::map_dbl(get_hausdorff_distance_impl, streamline = streamline2)
     ) %>%
-    dplyr::summarise(dist = max(dist))
-  max_dist1 <- tmp$dist
+    dplyr::summarise(dist = max(dist)) %>%
+    dplyr::pull(dist)
 
-  tmp <- streamline2 %>%
+  dist2 <- streamline2 %>%
     dplyr::mutate(
-      Points = purrr::pmap(list(x, y, z), c),
-      dist = purrr::map_dbl(Points, get_hausdorff_distance_internal, streamline1)
+      dist = purrr::pmap(list(x, y, z), c) %>%
+        purrr::map_dbl(get_hausdorff_distance_impl, streamline = streamline1)
     ) %>%
-    dplyr::summarise(dist = max(dist))
-  max_dist2 <- tmp$dist
+    dplyr::summarise(dist = max(dist)) %>%
+    dplyr::pull(dist)
 
-  max(max_dist1, max_dist2)
+  max(dist1, dist2)
 }
 
 #' @rdname get-distance
@@ -409,7 +376,13 @@ align_streamline2 <- function(fixed_streamline, moving_streamline, cost_function
 #' @export
 #'
 #' @examples
-plot_streamline <- function(streamline, validate = TRUE, plot_microstructure = FALSE, new_window = TRUE, scale = 4, ...) {
+plot_streamline <- function(
+  streamline,
+  validate = TRUE,
+  plot_microstructure = FALSE,
+  new_window = TRUE,
+  scale = 4,
+  ...) {
   if (validate)
     if (!is_streamline(streamline))
       stop("The input object to be plotted should be of class streamline.")

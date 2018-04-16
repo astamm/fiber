@@ -2,12 +2,9 @@
 % Please edit documentation in R/streamline_utils.R
 \name{streamline}
 \alias{streamline}
-\alias{streamline_}
 \title{Streamline Constructor}
 \usage{
 streamline(..., validate = TRUE)
-
-streamline_(xs, validate = TRUE)
 }
 \arguments{
 \item{...}{A set of name-value pairs. Arguments are evaluated sequentially,

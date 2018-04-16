@@ -17,13 +17,13 @@ get_curvilinear_length(streamline, validate = TRUE)
 
 get_sinuosity(streamline, validate = TRUE)
 
-get_curvature(streamline, validate = TRUE, direction = NULL)
+get_curvature(streamline, validate = TRUE)
 
-get_curvature_max(streamline, validate = TRUE, direction = NULL)
+get_curvature_max(streamline, validate = TRUE)
 
-get_curvature_mean(streamline, validate = TRUE, direction = NULL)
+get_curvature_mean(streamline, validate = TRUE)
 
-get_curvature_sd(streamline, validate = TRUE, direction = NULL)
+get_curvature_sd(streamline, validate = TRUE)
 }
 \arguments{
 \item{streamline}{A \code{\link{streamline}}.}
