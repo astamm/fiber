@@ -157,33 +157,6 @@ get_sinuosity <- function(streamline, validate = TRUE) {
   cl / el
 }
 
-myeval <- function(model, test) {
-  test <- test %>%
-    tibble::as_tibble() %>%
-    dplyr::filter(s >= model$basis$rangeval[1], s <= model$basis$rangeval[2])
-  obs <- as.matrix(test[, 2:4])
-  pred <- fda::eval.fd(test$s, model)
-  norm(obs - pred, "F")
-}
-
-cost_gcv <- function(x, st) {
-  cv <- modelr::crossv_mc(st, 100)
-  models <- purrr::map(cv$train, cost_fit, x = x)
-  errors <- purrr::map2_dbl(models, cv$test, myeval)
-  mean(errors)
-}
-
-cost_fit <- function(st, x) {
-  st <- tibble::as_tibble(st)
-  grid <- st$s
-  data <- array(dim = c(length(grid), 1L, 3L))
-  data <- matrix(0, nrow = length(grid), 3L)
-  data[, 1] <- st$x
-  data[, 2] <- st$y
-  data[, 3] <- st$z
-  fda::Data2fd(grid, data, basisobj = 5L, lambda = x)
-}
-
 #' @rdname get-shape
 #' @export
 get_curvature <- function(st, validate = TRUE) {
@@ -191,27 +164,21 @@ get_curvature <- function(st, validate = TRUE) {
     if (!is_streamline(st))
       stop("The input dataset is not of class streamline.")
 
-  grid <- st$s
-  data <- array(dim = c(length(grid), 1L, 3L))
-  data <- matrix(0, nrow = length(grid), 3L)
-  data[, 1] <- st$x
-  data[, 2] <- st$y
-  data[, 3] <- st$z
+  ssx <- smooth.spline(st$s, st$x, df = 3)
+  ssy <- smooth.spline(st$s, st$y, df = 3)
+  ssz <- smooth.spline(st$s, st$z, df = 3)
 
-  lambda_opt <- optimise(cost_gcv, c(1e-6, 100), st = st)$minimum
-  writeLines(paste("Optimal roughness penalization (minimal GCV):", lambda_opt))
-  fd <- fda::Data2fd(grid, data, basisobj = 5L, lambda = lambda_opt)
-  d1 <- fda::eval.fd(grid, fd, Lfdobj = 1)
-  d2 <- fda::eval.fd(grid, fd, Lfdobj = 2)
-  dx <- d1[, 1]
-  dy <- d1[, 2]
-  dz <- d1[, 3]
-  d2x <- d2[, 1]
-  d2y <- d2[, 2]
-  d2z <- d2[, 3]
+  dx <- predict(ssx, st$s, 1)$y
+  dy <- predict(ssy, st$s, 1)$y
+  dz <- predict(ssz, st$s, 1)$y
+  d2x <- predict(ssx, st$s, 2)$y
+  d2y <- predict(ssy, st$s, 2)$y
+  d2z <- predict(ssz, st$s, 2)$y
+
   k <- sqrt( ( (d2z * dy - d2y * dz)^2 + (d2x * dz - d2z * dx)^2 + (d2y * dx - d2x * dy)^2 )
              / (dx^2 + dy^2 + dz^2)^3 )
-  tibble::tibble(s = grid, curv = k)
+
+  tibble::tibble(s = st$s, curv = k)
 }
 
 #' @rdname get-shape
