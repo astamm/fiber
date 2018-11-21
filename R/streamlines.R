@@ -78,6 +78,8 @@ is_streamline <- function(x) {
   "streamline" %in% class(x)
 }
 
+is.streamline <- is_streamline
+
 #' Shape Characteristics of a Streamline
 #'
 #' \code{get_euclidean_length} computes the Euclidean length of a streamline,
@@ -390,7 +392,7 @@ align_streamline2 <- function(fixed_streamline, moving_streamline, cost_function
 #' cc <- read_tract(file)
 #' st <- cc$data[[1]]
 #' plot_streamline(st)
-plot_streamline <- function(
+plot.streamline <- function(
   streamline,
   validate = TRUE,
   plot_microstructure = FALSE,
@@ -412,7 +414,7 @@ plot_streamline <- function(
       for (i in 1:npts)
         rgl::plot3d(
           rgl::ellipse3d(
-            streamline$t[[i]],
+            .ConvertTensorToMatrix(streamline$t[[i]]),
             centre = c(streamline$x[[i]], streamline$y[[i]], streamline$z[[i]]),
             scale = rep(scl, 3L)
           ),

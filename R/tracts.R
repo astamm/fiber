@@ -107,6 +107,8 @@ is_tract <- function(object) {
   "tract" %in% class(object)
 }
 
+is.tract <- is_tract
+
 #' Tract Reader
 #'
 #' Read tractography data stored in a CSV file as output by VTPtoCSV.
@@ -175,7 +177,7 @@ write_tract <- function(tract, file, ...) {
 #'
 #' \code{plot_tract} plots a \code{tract} object.
 #'
-#' @param tract A \code{\link{tract}} to be plotted.
+#' @param x A \code{\link{tract}} to be plotted.
 #'
 #' @return Invisibly returns the input \code{\link{tract}}.
 #' @export
@@ -187,30 +189,23 @@ write_tract <- function(tract, file, ...) {
 #' cst_right <- read_tract(file)
 #' cst <- bind_tracts(cst_left, cst_right)
 #' plot_tract(cst)
-plot_tract <- function(tract, transparency = 1) {
-  if (!is_tract(tract))
-    stop("Input object is not of class tract.")
-
-  name <- unique(tract$name)
-  if (length(name) > 1L)
-    stop("It is not possible to simulaneously plot different tracts.")
-
-  case <- unique(tract$case)
-  if (length(case) > 1L)
-    stop("It is not possible to simulaneously plot a tract for different subjects.")
+plot.tract <- function(x, transparency = 1) {
+  name <- x$TractName
+  case <- x$PatientId
+  scan <- x$ScanId
 
   print(
-    tract %>%
-      tidyr::unnest(.id = "LineID") %>%
-      tidyr::gather(CoordName, CoordVal, x, y, z) %>%
+    tibble(StreamlineData = x$Streamlines) %>%
+      unnest(.id = "StreamlineId") %>%
+      tidyr::gather(Coordinate, Value, x, y, z) %>%
       ggplot2::ggplot(ggplot2::aes(
         x = s,
-        y = CoordVal,
+        y = Value,
         col = scan,
-        fill = LineID
+        fill = StreamlineId
       )) +
       ggplot2::geom_line(size = 0.5, alpha = transparency) +
-      ggplot2::facet_wrap(~ CoordName, scales = "free", nrow = 3L) +
+      ggplot2::facet_wrap(~ Coordinate, scales = "free", nrow = 3L) +
       ggplot2::theme_bw() +
       ggplot2::xlab("Arc Length (mm)") +
       ggplot2::ylab("Coordinate (mm)") +
@@ -219,7 +214,7 @@ plot_tract <- function(tract, transparency = 1) {
       ggplot2::ggtitle(paste(name, "of Subject", case))
   )
 
-  invisible(tract)
+  invisible(x)
 }
 
 #' Tract Combination
