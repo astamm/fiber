@@ -4,8 +4,8 @@
 \alias{approx_tensors}
 \title{Tensor Interpolation}
 \usage{
-approx_tensors(x, tensors, xout, method = "linear", n = 50, yleft, yright,
-  rule = 1, ties = mean)
+approx_tensors(x, tensors, xout, method = "linear", n = 50, yleft,
+  yright, rule = 1, ties = mean)
 }
 \arguments{
 \item{x}{Numeric vector specifying the locations at which tensors are

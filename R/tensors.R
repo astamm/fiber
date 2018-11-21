@@ -12,7 +12,7 @@
 tensor <- function(scale = 1) {
   if (scale <= .Machine$double.eps)
     stop("The proportionality constant should be positive.")
-  as_tensor(diag(scale, 3L), validate = FALSE)
+  as_tensor(c(scale, 0, scale, 0, 0, scale), validate = FALSE)
 }
 
 #' Tensor Coercion
@@ -41,20 +41,25 @@ as_tensor <- function(x, validate = TRUE, ...) {
 
 #' @export
 as_tensor.matrix <- function(x, validate = TRUE, ...) {
-  if (validate) x <- validate_tensor(x)
+  if (validate) x <- .ValidateTensorMatrix(x)
+  x <- .ConvertMatrixToTensor(x)
   class(x) <- c("tensor", class(x))
   x
 }
 
 #' @export
 as_tensor.numeric <- function(x, validate = TRUE, ...) {
-  .as_tensor_numeric(x, validate, ...)
+  if (validate) {
+    x <- x %>%
+      .ConvertTensorToMatrix() %>%
+      .ValidateTensorMatrix() %>%
+      .ConvertMatrixToTensor()
+  }
+  class(x) <- c("tensor", class(x))
+  x
 }
 
-.as_tensor_numeric <- function(x, validate = TRUE, twice = FALSE, ...) {
-  if (length(x) != 6L)
-    stop("Input vector should be of dimension 6.")
-
+.ConvertTensorToMatrix <- function(x, twice = FALSE) {
   xx <- x[1]
   yx <- x[2]
   yy <- x[3]
@@ -68,11 +73,27 @@ as_tensor.numeric <- function(x, validate = TRUE, ...) {
     zy <- zy / 2
   }
 
-  output_matrix <- cbind(c(xx, yx, zx), c(yx, yy, zy), c(zx, zy, zz))
-  as_tensor(output_matrix, validate)
+  cbind(c(xx, yx, zx), c(yx, yy, zy), c(zx, zy, zz))
 }
 
-validate_tensor <- function(x) {
+.ConvertMatrixToTensor <- function(x, twice = FALSE) {
+  xx <- x[1,1]
+  xy <- x[2,1]
+  yy <- x[2,2]
+  xz <- x[3,1]
+  yz <- x[3,2]
+  zz <- x[3,3]
+
+  if (twice) {
+    xy <- xy * 2
+    xz <- xz * 2
+    yz <- yz * 2
+  }
+
+  c(xx, xy, yy, xz, yz, zz)
+}
+
+.ValidateTensorMatrix <- function(x) {
   d <- nrow(x)
   if (d != 3L)
     stop("Input tensor should be of dimension 3.")
@@ -99,13 +120,14 @@ validate_tensor <- function(x) {
 #'
 #' @examples
 #' is_tensor(tensor())
-is.tensor <- function(x) {
+is_tensor <- function(x) {
   "tensor" %in% class(x)
 }
 
-#' @rdname is.tensor
 #' @export
-is_tensor <- is.tensor
+print.tensor <- function(x, ...) {
+  .ConvertTensorToMatrix(x)
+}
 
 #' Tensor Invariants
 #'
@@ -118,9 +140,7 @@ is_tensor <- is.tensor
 #' \code{get_R2_invariant} computes the fractional anisotropy of the tensor and
 #' \code{get_R3_invariant} computes the mode of the tensor.
 #'
-#' @param x A \code{3x3} symmetric definite positive matrix.
-#' @param validate A boolean which is \code{TRUE} if the input type should be
-#'   checked or \code{FALSE} otherwise (default: \code{TRUE}).
+#' @param x An object of class \code{\link{tensor}}.
 #'
 #' @return A scalar giving the desired tensor invariant extracted from the input
 #'   diffusion tensor.
@@ -134,8 +154,10 @@ NULL
 
 #' @export
 #' @keywords internal
-get_tensor_invariants <- function(x, validate = TRUE) {
-  if (validate) x <- validate_tensor(x)
+get_tensor_invariants <- function(x) {
+  if (!is_tensor(x))
+    stop("Input should be of class tensor.")
+  x <- .ConvertTensorToMatrix(x)
   K1 <- sum(diag(x))
   MD <- K1 / 3
   Dtilde <- x - diag(MD, 3L)
@@ -147,22 +169,22 @@ get_tensor_invariants <- function(x, validate = TRUE) {
 
 #' @rdname get-invariant
 #' @export
-get_K1_invariant <- function(x, validate = TRUE) {
-  l <- get_tensor_invariants(x, validate)
+get_K1_invariant <- function(x) {
+  l <- get_tensor_invariants(x)
   l$K1
 }
 
 #' @rdname get-invariant
 #' @export
-get_R2_invariant <- function(x, validate = TRUE) {
-  l <- get_tensor_invariants(x, validate)
+get_R2_invariant <- function(x) {
+  l <- get_tensor_invariants(x)
   l$R2
 }
 
 #' @rdname get-invariant
 #' @export
-get_R3_invariant <- function(x, validate = TRUE) {
-  l <- get_tensor_invariants(x, validate)
+get_R3_invariant <- function(x) {
+  l <- get_tensor_invariants(x)
   l$R3
 }
 
@@ -244,57 +266,78 @@ get_LI_eigenvalues <- function (K1, R2, R3) {
 #' approx_tensors(s, D, method = "log")
 approx_tensors <- function(x, tensors, xout, method = "linear", n = 50, yleft,
                            yright, rule = 1, ties = mean) {
+  method <- match.arg(method, c("linear", "log"))
+  if (is.na(method))
+    stop("Invalid interpolation method. Choices are: linear or log.")
+
+  stopifnot(is.numeric(rule), (lenR <- length(rule)) >= 1L, lenR <= 2L)
+
+  if (lenR == 1)
+    rule <- rule[c(1, 1)]
+
+  if (missing(yleft))
+    yleft <- if (rule[1L] == 1)
+      NA
+  else y[1L]
+
+  if (missing(yright))
+    yright <- if (rule[2L] == 1)
+      NA
+  else y[length(y)]
+
   if (method == "log")
     tensors <- purrr::map(tensors, tensor_log)
 
-  out <- NULL
-  for (i in 1:3) {
-    for (j in 1:i) {
-      y <- purrr::map_dbl(tensors, `[`, i, j)
-      out[[length(out) + 1]] <- approx(x, y, xout, "linear", n, yleft, yright, rule, 0, ties)
-    }
-  }
+  out <- tensors %>%
+    purrr::transpose() %>%
+    purrr::simplify_all() %>%
+    purrr::map(~ stats::approx(x, .x, xout, "linear", n, yleft, yright, rule, 0, ties))
 
   R <- out %>%
     purrr::map("y") %>%
     purrr::transpose() %>%
-    purrr::map(purrr::flatten_dbl) %>%
-    purrr::map(as_tensor, validate = FALSE)
+    purrr::simplify_all()
 
   if (method == "log") {
     return(list(
       x = out[[1]]$x,
-      y = purrr::map(R, tensor_exp, validate = FALSE) %>%
+      y = R %>%
+        purrr::map(tensor_exp, validate = FALSE) %>%
         purrr::map(as_tensor, validate = FALSE)
     ))
   }
 
-  R <- purrr::map(R, ~ eigen(., symmetric = TRUE)$vectors)
-  tmp <- purrr::map(tensors, get_tensor_invariants, validate = FALSE)
+  R <- R %>%
+    purrr::map(.ConvertTensorToMatrix) %>%
+    purrr::map(eigen, symmetric = TRUE) %>%
+    purrr::map("vectors")
+
+  tmp <- purrr::map(tensors, get_tensor_invariants)
   K1 <- purrr::map_dbl(tmp, "K1")
-  K1 <- approx(x, K1, xout, "linear", n, yleft, yright, rule, 0, ties)$y
+  K1 <- stats::approx(x, K1, xout, "linear", n, yleft, yright, rule, 0, ties)$y
   R2 <- purrr::map_dbl(tmp, "R2")
-  R2 <- approx(x, R2, xout, "linear", n, yleft, yright, rule, 0, ties)$y
+  R2 <- stats::approx(x, R2, xout, "linear", n, yleft, yright, rule, 0, ties)$y
   R3 <- purrr::map_dbl(tmp, "R3")
-  R3 <- approx(x, R3, xout, "linear", n, yleft, yright, rule, 0, ties)$y
+  R3 <- stats::approx(x, R3, xout, "linear", n, yleft, yright, rule, 0, ties)$y
   L <- purrr::pmap(list(K1, R2, R3), get_LI_eigenvalues)
 
   list(
     x = out[[1]]$x,
     y = purrr::map2(R, L, ~ .x %*% diag(.y) %*% t(.x)) %>%
+      purrr::map(.ConvertMatrixToTensor) %>%
       purrr::map(as_tensor, validate = FALSE)
   )
 }
 
 #' Tensor Exponentiation and Logarithm
 #'
-#' @param x A tensor.
-#' @param validate A boolean which is \code{TRUE} if the input type should be
-#'   checked or \code{FALSE} otherwise (default: \code{TRUE}).
+#' @param x An object of class \code{\link{tensor}}.
+#' @param validate A boolean specifying wether the function should check that
+#'   input is a tensor.
 #'
 #' @return A 3x3 symmetric matrix which is the exponential of the input in the
 #'   case of \code{tensor_exp} or the logarithm of the input in the case of
-#'   \code{tensor_log}.
+#'   \code{tensor_log}. It is stored as a 6-dimensional vector.
 #' @name tensor-logexp
 #'
 #' @examples
@@ -305,15 +348,25 @@ NULL
 #' @rdname tensor-logexp
 #' @export
 tensor_exp <- function(x, validate = TRUE) {
-  if (validate) x <- validate_tensor(x)
+  if (validate) {
+    if (!is_tensor(x))
+      stop("Input should be of class tensor.")
+  }
+  x <- .ConvertTensorToMatrix(x)
   eig <- eigen(x, symmetric = TRUE)
-  eig$vectors %*% diag(exp(eig$values)) %*% t(eig$vectors)
+  x <- eig$vectors %*% diag(exp(eig$values)) %*% t(eig$vectors)
+  .ConvertMatrixToTensor(x)
 }
 
 #' @rdname tensor-logexp
 #' @export
 tensor_log <- function(x, validate = TRUE) {
-  if (validate) x <- validate_tensor(x)
+  if (validate) {
+    if (!is_tensor(x))
+      stop("Input should be of class tensor.")
+  }
+  x <- .ConvertTensorToMatrix(x)
   eig <- eigen(x, symmetric = TRUE)
-  eig$vectors %*% diag(log(eig$values)) %*% t(eig$vectors)
+  x <- eig$vectors %*% diag(log(eig$values)) %*% t(eig$vectors)
+  .ConvertMatrixToTensor(x)
 }

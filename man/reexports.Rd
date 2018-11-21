@@ -4,11 +4,8 @@
 \name{reexports}
 \alias{reexports}
 \alias{\%>\%}
-\alias{reexports}
 \alias{:=}
-\alias{reexports}
 \alias{.data}
-\alias{reexports}
 \alias{MBD}
 \title{Objects exported from other packages}
 \keyword{internal}

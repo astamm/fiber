@@ -7,17 +7,14 @@
 \alias{get_R3_invariant}
 \title{Tensor Invariants}
 \usage{
-get_K1_invariant(x, validate = TRUE)
+get_K1_invariant(x)
 
-get_R2_invariant(x, validate = TRUE)
+get_R2_invariant(x)
 
-get_R3_invariant(x, validate = TRUE)
+get_R3_invariant(x)
 }
 \arguments{
-\item{x}{A \code{3x3} symmetric definite positive matrix.}
-
-\item{validate}{A boolean which is \code{TRUE} if the input type should be
-checked or \code{FALSE} otherwise (default: \code{TRUE}).}
+\item{x}{An object of class \code{\link{tensor}}.}
 }
 \value{
 A scalar giving the desired tensor invariant extracted from the input

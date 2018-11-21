@@ -111,9 +111,7 @@ is_streamline <- function(x) {
 #' get_curvilinear_length(st)
 #' get_sinuosity(st)
 #' get_curvature(st)
-#' get_curvature_max(st)
-#' get_curvature_mean(st)
-#' get_curvature_sd(st)
+#' get_torsion(st)
 NULL
 
 #' @rdname get-shape
@@ -159,7 +157,7 @@ get_sinuosity <- function(streamline, validate = TRUE) {
 
 #' @rdname get-shape
 #' @export
-get_curvature <- function(st, validate = TRUE) {
+get_curvature <- function(st, validate = TRUE, scalar = NULL) {
   if (validate)
     if (!is_streamline(st))
       stop("The input dataset is not of class streamline.")
@@ -175,43 +173,63 @@ get_curvature <- function(st, validate = TRUE) {
   d2y <- predict(ssy, st$s, 2)$y
   d2z <- predict(ssz, st$s, 2)$y
 
-  k <- sqrt( ( (d2z * dy - d2y * dz)^2 + (d2x * dz - d2z * dx)^2 + (d2y * dx - d2x * dy)^2 )
-             / (dx^2 + dy^2 + dz^2)^3 )
+  num <- (d2z * dy - d2y * dz)^2 + (d2x * dz - d2z * dx)^2 + (d2y * dx - d2x * dy)^2
+  denom <- (dx^2 + dy^2 + dz^2)^3
+  k <- sqrt(num / denom)
 
-  tibble::tibble(s = st$s, curv = k)
+  if (is.null(scalar))
+    return(tibble::tibble(s = st$s, curvature = k))
+
+  scalar <- match.arg(scalar, c("mean", "sd", "max"))
+
+  if (scalar == "max")
+    return(max(k))
+
+  if (scalar == "mean")
+    return(mean(k))
+
+  if (scalar == "sd")
+    return(sd(k))
 }
 
 #' @rdname get-shape
 #' @export
-get_curvature_max <- function(streamline, validate = TRUE) {
+get_torsion <- function(st, validate = TRUE, scalar = NULL) {
   if (validate)
-    if (!is_streamline(streamline))
+    if (!is_streamline(st))
       stop("The input dataset is not of class streamline.")
 
-  curvature <- get_curvature(streamline, FALSE)
-  max(curvature$k)
-}
+  ssx <- smooth.spline(st$s, st$x, df = 4)
+  ssy <- smooth.spline(st$s, st$y, df = 4)
+  ssz <- smooth.spline(st$s, st$z, df = 4)
 
-#' @rdname get-shape
-#' @export
-get_curvature_mean <- function(streamline, validate = TRUE) {
-  if (validate)
-    if (!is_streamline(streamline))
-      stop("The input dataset is not of class streamline.")
+  dx <- predict(ssx, st$s, 1)$y
+  dy <- predict(ssy, st$s, 1)$y
+  dz <- predict(ssz, st$s, 1)$y
+  d2x <- predict(ssx, st$s, 2)$y
+  d2y <- predict(ssy, st$s, 2)$y
+  d2z <- predict(ssz, st$s, 2)$y
+  d3x <- predict(ssx, st$s, 3)$y
+  d3y <- predict(ssy, st$s, 3)$y
+  d3z <- predict(ssz, st$s, 3)$y
 
-  curvature <- get_curvature(streamline, FALSE, direction)
-  mean(curvature$k)
-}
+  num <- d3x * (dy * d2z - d2y * dz) + d3y * (d2x * dz - dx * d2z) + d3z * (dx * d2y - d2x * dy)
+  denom <- (dy * d2z - d2y * dz)^2 + (d2x * dz - dx * d2z)^2 + (dx * d2y - d2x * dy)^2
+  tau <- num / denom
 
-#' @rdname get-shape
-#' @export
-get_curvature_sd <- function(streamline, validate = TRUE) {
-  if (validate)
-    if (!is_streamline(streamline))
-      stop("The input dataset is not of class streamline.")
+  if (is.null(scalar))
+    return(tibble::tibble(s = st$s, torsion = tau))
 
-  curvature <- get_curvature(streamline, FALSE, direction)
-  sd(curvature$k)
+  scalar <- match.arg(scalar, c("mean", "sd", "max"))
+
+  if (scalar == "max")
+    return(max(tau))
+
+  if (scalar == "mean")
+    return(mean(tau))
+
+  if (scalar == "sd")
+    return(sd(tau))
 }
 
 #' Distances Between Streamlines
@@ -268,7 +286,7 @@ get_L2_distance <- function(streamline1, streamline2) {
     streamline1 <- streamline2
     streamline2 <- str
   }
-  aln <- align(
+  aln <- align_streamline(
     fixed_streamline = streamline1,
     moving_streamline = streamline2,
     cost_function = cost_L2
@@ -284,7 +302,7 @@ get_L1_distance <- function(streamline1, streamline2) {
     streamline1 <- streamline2
     streamline2 <- str
   }
-  aln <- align(
+  aln <- align_streamline(
     fixed_streamline = streamline1,
     moving_streamline = streamline2,
     cost_function = cost_L1
@@ -368,6 +386,10 @@ align_streamline2 <- function(fixed_streamline, moving_streamline, cost_function
 #' @export
 #'
 #' @examples
+#' file <- system.file("extdata", "CC_SingleTensor.csv", package = "fiber")
+#' cc <- read_tract(file)
+#' st <- cc$data[[1]]
+#' plot_streamline(st)
 plot_streamline <- function(
   streamline,
   validate = TRUE,

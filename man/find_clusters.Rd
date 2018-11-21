@@ -4,8 +4,8 @@
 \alias{find_clusters}
 \title{Tract Clustering}
 \usage{
-find_clusters(distance_vector, k = 1L, max_iter = 100L, nstart = 100L,
-  ncores = 1L)
+find_clusters(distance_vector, k = 1L, max_iter = 100L,
+  nstart = 100L, ncores = 1L)
 }
 \arguments{
 \item{k}{An integer specifying the number of clusters (default: \code{1L}).}

@@ -127,21 +127,18 @@ get_fractional_anisotropy.streamline <- function(x) {
     as_streamline(validate = FALSE)
 }
 
-add_biomarkers <- function(data, model = "None") {
+#' @export
+add_biomarkers <- function(streamline, model = "None") {
   switch(
     model,
-    None = data,
-    DTI = data %>%
+    None = streamline,
+    SingleTensor = streamline %>%
       dplyr::mutate(
-        Tensors = purrr::pmap(list(`Tensors#0`, `Tensors#1`, `Tensors#2`,
-                                   `Tensors#3`,`Tensors#4`, `Tensors#5`), c) %>%
-          purrr::map(as_tensor) %>%
-          purrr::map(get_microstructure),
-        AD = purrr::map_dbl(Tensors, "AD"),
-        RD = purrr::map_dbl(Tensors, "RD"),
-        MD = purrr::map_dbl(Tensors, "MD"),
-        FA = purrr::map_dbl(Tensors, "FA")
+        t = list(`tensors#0`, `tensors#1`, `tensors#2`, `tensors#3`,`tensors#4`, `tensors#5`) %>%
+          purrr::pmap(c) %>%
+          purrr::map(as_tensor)
       ) %>%
-      dplyr::select(-dplyr::starts_with("Tensors"))
+      dplyr::select(s, x, y, z, t) %>%
+      as_streamline(validate = FALSE)
   )
 }

@@ -4,8 +4,8 @@
 \alias{plot_streamline}
 \title{Streamline Plotting}
 \usage{
-plot_streamline(streamline, validate = TRUE, plot_microstructure = FALSE,
-  new_window = TRUE, scale = 4, ...)
+plot_streamline(streamline, validate = TRUE,
+  plot_microstructure = FALSE, new_window = TRUE, scale = 4, ...)
 }
 \arguments{
 \item{streamline}{A \code{\link{streamline}} object.}
@@ -31,4 +31,10 @@ The function is used for its side effect of plotting.
 This function plots a strewamline in 3D using the \code{rgl} package. If
 diffusion tensor information is available, it is also plotted as ellipsoids
 at each point of the streamline.
+}
+\examples{
+file <- system.file("extdata", "CC_SingleTensor.csv", package = "fiber")
+cc <- read_tract(file)
+st <- cc$data[[1]]
+plot_streamline(st)
 }

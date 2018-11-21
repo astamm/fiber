@@ -35,29 +35,38 @@ tract <- function(...) {
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
 #' tr <- as_tract(cst_left)
-as_tract <- function(x, validate = TRUE, biomarkers = NULL) {
+as_tract <- function(x, validate = TRUE, biomarkers = "None") {
   UseMethod("as_tract", x)
 }
 
 #' @export
 #' @rdname as_tract
-as_tract.list <- function(x, validate = TRUE, biomarkers = NULL) {
+as_tract.list <- function(x, validate = TRUE) {
   if (validate) {
     if (!is.list(x))
-      stop("First input should be a list.")
+      stop("Input should be a list.")
 
-    if (!all(c("id", "data") %in% names(x)))
-      stop("Input list should contain fields id and data.")
+    if (length(x) != 4)
+      stop("Input list should contain exactly 4 fields")
 
-    if (!is.integer(x$id))
-      stop("The id field should be formatted as integer.")
+    if (!all(c("PatientId", "ScanId", "TractName", "Streamlines") %in% names(x)))
+      stop("Input list should contain fields PatientId, ScanId, TractName and Streamlinees.")
 
-    if (!is.list(x$data))
-      stop("The data field shoubd be a list.")
+    if (!is.character(x$PatientId) || length(x$PatientId) != 1)
+      stop("The PatientId field should be of type character and of length 1")
+
+    if (!is.character(x$ScanId) || length(x$ScanId) != 1)
+      stop("The ScanId field should be of type character and of length 1")
+
+    if (!is.character(x$TractName) || length(x$TractName) != 1)
+      stop("The TractName field should be of type character and of length 1")
+
+    if (!is.list(x$Streamlines))
+      stop("The Streamlines field should be a list.")
 
     all_streamline <- TRUE
-    for (i in seq_along(x$data)) {
-      str <- x$data[[i]]
+    for (i in seq_along(x$Streamlines)) {
+      str <- x$Streamlines[[i]]
       if (!is_streamline(str)) {
         all_streamline <- FALSE
         break()
@@ -65,17 +74,16 @@ as_tract.list <- function(x, validate = TRUE, biomarkers = NULL) {
     }
 
     if (!all_streamline)
-      stop("The data list should contain only streamline objects.")
+      stop("The Streamlines field should contain only streamline objects.")
   }
 
-  x <- tibble::as_tibble(x)
   class(x) <- c("tract", class(x))
   x
 }
 
 #' @export
 #' @rdname as_tract
-as_tract.tbl_df <- function(x, validate = TRUE, biomarkers = NULL) {
+as_tract.tbl_df <- function(x, validate = TRUE, biomarkers = "None") {
   x %>%
     as.list() %>%
     as_tract(validate, biomarkers)
@@ -112,7 +120,7 @@ is_tract <- function(object) {
 #' @examples
 #' file <- system.file("extdata", "Case001_CST_Left.csv", package = "fdatractography")
 #' cst_left <- read_tract(file)
-read_tract <- function(path, name, case, scan, side = NA_character_) {
+read_tract <- function(path, name = "CST", case = "001", scan = "001", biomarkers = "None") {
   data <- readr::read_csv(path)
 
   if (ncol(data) < 5L)
@@ -125,12 +133,18 @@ read_tract <- function(path, name, case, scan, side = NA_character_) {
   if (nrow(data) == 0)
     stop("Data sheet is empty.")
 
-  data %>%
-    dplyr::arrange(StreamlineId, PointId) %>%
-    dplyr::select(-PointId) %>%
-    tidyr::nest(-StreamlineId) %>%
-    dplyr::rename(id = StreamlineId) %>%
-    dplyr::mutate(data = purrr::map(data, as_streamline)) %>%
+  list(
+    PatientId = case,
+    ScanId = scan,
+    TractName = name,
+    Streamlines = data %>%
+      dplyr::arrange(StreamlineId, PointId) %>%
+      dplyr::select(-PointId) %>%
+      tidyr::nest(-StreamlineId, .key = "StreamlineData") %>%
+      dplyr::pull(StreamlineData) %>%
+      purrr::map(as_streamline) %>%
+      purrr::map(add_biomarkers, model = biomarkers)
+  ) %>%
     as_tract()
 }
 

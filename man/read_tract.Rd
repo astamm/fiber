@@ -4,7 +4,8 @@
 \alias{read_tract}
 \title{Tract Reader}
 \usage{
-read_tract(path, name, case, scan, side = NA_character_)
+read_tract(path, name = "CST", case = "001", scan = "001",
+  biomarkers = "None")
 }
 \arguments{
 \item{path}{A string indicating the path to the CSV file to be read. The CSV

@@ -6,11 +6,11 @@
 \alias{as_tract.tbl_df}
 \title{Tract Coercion}
 \usage{
-as_tract(x, validate = TRUE, biomarkers = NULL)
+as_tract(x, validate = TRUE, biomarkers = "None")
 
-\method{as_tract}{list}(x, validate = TRUE, biomarkers = NULL)
+\method{as_tract}{list}(x, validate = TRUE)
 
-\method{as_tract}{tbl_df}(x, validate = TRUE, biomarkers = NULL)
+\method{as_tract}{tbl_df}(x, validate = TRUE, biomarkers = "None")
 }
 \arguments{
 \item{x}{Input list.}

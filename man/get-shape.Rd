@@ -6,9 +6,7 @@
 \alias{get_curvilinear_length}
 \alias{get_sinuosity}
 \alias{get_curvature}
-\alias{get_curvature_max}
-\alias{get_curvature_mean}
-\alias{get_curvature_sd}
+\alias{get_torsion}
 \title{Shape Characteristics of a Streamline}
 \usage{
 get_euclidean_length(streamline, validate = TRUE)
@@ -17,13 +15,9 @@ get_curvilinear_length(streamline, validate = TRUE)
 
 get_sinuosity(streamline, validate = TRUE)
 
-get_curvature(st, validate = TRUE)
+get_curvature(st, validate = TRUE, scalar = NULL)
 
-get_curvature_max(streamline, validate = TRUE)
-
-get_curvature_mean(streamline, validate = TRUE)
-
-get_curvature_sd(streamline, validate = TRUE)
+get_torsion(st, validate = TRUE, scalar = NULL)
 }
 \arguments{
 \item{streamline}{A \code{\link{streamline}}.}
@@ -61,7 +55,5 @@ get_euclidean_length(st)
 get_curvilinear_length(st)
 get_sinuosity(st)
 get_curvature(st)
-get_curvature_max(st)
-get_curvature_mean(st)
-get_curvature_sd(st)
+get_torsion(st)
 }
