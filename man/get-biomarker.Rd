@@ -20,10 +20,7 @@ get_mean_diffusivity(x)
 get_fractional_anisotropy(x)
 }
 \arguments{
-\item{x}{A tensor or a streamline.}
-
-\item{validate}{A boolean which is \code{TRUE} if the input type should be
-checked or \code{FALSE} otherwise (default: \code{TRUE}).}
+\item{x}{An object of class \code{\link{tensor}}.}
 }
 \value{
 A scalar giving the desired diffusion biomarker extracted from the input diffusion tensor.
@@ -34,7 +31,7 @@ diffusion tensor.
 \code{get_mean_diffusivity} computes the mean diffusivity of a diffusion tensor.
 }
 \examples{
-DT <- diag(c(1.71e-3, 3e-4, 1e-4))
+DT <- as_tensor(diag(c(1.71e-3, 3e-4, 1e-4)))
 get_fractional_anisotropy(DT)
 get_mean_diffusivity(DT)
 }

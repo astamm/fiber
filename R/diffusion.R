@@ -4,14 +4,12 @@
 #' diffusion tensor.
 #' \code{get_mean_diffusivity} computes the mean diffusivity of a diffusion tensor.
 #'
-#' @param x A tensor or a streamline.
-#' @param validate A boolean which is \code{TRUE} if the input type should be
-#'   checked or \code{FALSE} otherwise (default: \code{TRUE}).
+#' @param x An object of class \code{\link{tensor}}.
 #'
 #' @return A scalar giving the desired diffusion biomarker extracted from the input diffusion tensor.
 #' @name get-biomarker
 #' @examples
-#' DT <- diag(c(1.71e-3, 3e-4, 1e-4))
+#' DT <- as_tensor(diag(c(1.71e-3, 3e-4, 1e-4)))
 #' get_fractional_anisotropy(DT)
 #' get_mean_diffusivity(DT)
 NULL
@@ -24,7 +22,8 @@ get_microstructure <- function(x) {
 
 #' @export
 get_microstructure.tensor <- function(x) {
-  vals <- eigen(tensor, symmetric = TRUE, only.values = TRUE)$values
+  x <- .ConvertTensorToMatrix(x)
+  vals <- eigen(x, symmetric = TRUE, only.values = TRUE)$values
   m <- mean(vals)
   list(
     AD = vals[1],
@@ -34,97 +33,40 @@ get_microstructure.tensor <- function(x) {
   )
 }
 
-#' @export
-get_microstructure.streamline <- function(x) {
-  x %>%
-    dplyr::mutate(
-      microstructure = purrr::map(diffusion, get_microstructure)
-    ) %>%
-    as_streamline(validate = FALSE)
-}
-
 #' @rdname get-biomarker
 #' @export
 get_axial_diffusivity <- function(x) {
-  UseMethod("get_axial_diffusivity", x)
-}
-
-#' @export
-get_axial_diffusivity.tensor <- function(x) {
+  if (!is_tensor(x))
+    stop("Axial diffusivity is a tensor-specific feature but input is not of class tensor.")
   l <- get_microstructure(x)
   l$AD
-}
-
-#' @export
-get_axial_diffusivity.streamline <- function(x) {
-  x %>%
-    dplyr::mutate(
-      AD = purrr::map_dbl(diffusion, get_axial_diffusivity)
-    ) %>%
-  as_streamline(validate = FALSE)
 }
 
 #' @rdname get-biomarker
 #' @export
 get_radial_diffusivity <- function(x) {
-  UseMethod("get_radial_diffusivity", x)
-}
-
-#' @export
-get_radial_diffusivity.tensor <- function(x) {
+  if (!is_tensor(x))
+    stop("Radial diffusivity is a tensor-specific feature but input is not of class tensor.")
   l <- get_microstructure(x)
   l$RD
-}
-
-#' @export
-get_radial_diffusivity.streamline <- function(x) {
-  x %>%
-    dplyr::mutate(
-      RD = purrr::map_dbl(diffusion, get_radial_diffusivity)
-    ) %>%
-    as_streamline(validate = FALSE)
 }
 
 #' @rdname get-biomarker
 #' @export
 get_mean_diffusivity <- function(x) {
-  UseMethod("get_mean_diffusivity", x)
-}
-
-#' @export
-get_mean_diffusivity.tensor <- function(x) {
+  if (!is_tensor(x))
+    stop("Mean diffusivity is a tensor-specific feature but input is not of class tensor.")
   l <- get_microstructure(x)
   l$MD
-}
-
-#' @export
-get_mean_diffusivity.streamline <- function(x) {
-  x %>%
-    dplyr::mutate(
-      MD = purrr::map_dbl(diffusion, get_mean_diffusivity)
-    ) %>%
-    as_streamline(validate = FALSE)
 }
 
 #' @rdname get-biomarker
 #' @export
 get_fractional_anisotropy <- function(x) {
-  UseMethod("get_fractional_anisotropy", x)
-}
-
-#' @export
-get_fractional_anisotropy.tensor <- function(x) {
+  if (!is_tensor(x))
+    stop("Fractional anisotropy is a tensor-specific feature but input is not of class tensor.")
   l <- get_microstructure(x)
   l$FA
-}
-
-#' @export
-get_fractional_anisotropy.streamline <- function(x) {
-  x %>%
-    dplyr::mutate(
-      FA = purrr::map_dbl(diffusion, get_fractional_anisotropy)
-    ) %>%
-    as_streamline(validate = FALSE)
 }
 
 #' @export
