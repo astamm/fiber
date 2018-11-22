@@ -93,7 +93,7 @@ get_mean_diffusivity <- function(x) {
 
 #' @export
 get_mean_diffusivity.tensor <- function(x) {
-  l <- get_tensor_microstructure(x)
+  l <- get_microstructure(x)
   l$MD
 }
 
@@ -114,7 +114,7 @@ get_fractional_anisotropy <- function(x) {
 
 #' @export
 get_fractional_anisotropy.tensor <- function(x) {
-  l <- get_tensor_microstructure(x)
+  l <- get_microstructure(x)
   l$FA
 }
 
