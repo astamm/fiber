@@ -35,7 +35,7 @@ save(data_first_points, file = "data_first_points.RData")
 ######################################## Clustering ############################################
 ################################################################################################
 
-#### Load dataset points on cortex 
+#### Load dataset points on cortex
 load("data_first_points.RData")
 data_first_points_healthy_matrix = map_df (data_first_points, rbind)
 
@@ -94,7 +94,7 @@ setwd("~/Desktop/Politecnico di Milano/Luca Torriani - Project StatApp/RData")
 load("features_patients_9.RData")
 
 # Calcolo i centroidi
-features_reduced_tmp = purrr::map (features_list_sxdx, get_reduced_tot, mean_left=mean_left, sd_left=sd_left, mean_right=mean_right, sd_right=sd_right)
+features_reduced_tmp = purrr::map (features_list_sxdx, get_reduced_tot)
 
 features_reduced = map(features_reduced_tmp, extract_centroid) # Centroids
 var_sx_features_reduced = map(features_reduced_tmp, extract_var_sx)
