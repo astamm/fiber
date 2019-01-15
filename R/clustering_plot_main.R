@@ -19,6 +19,16 @@ load("cst_list.RData")
 
 # Create plots variance intracluster patient per patient
 
+# # No standardization
+# id_pat = 8
+# i = 3
+# side = "left"
+# quartz()
+# tmp= dplyr::filter(features_list_sxdx[[id_pat]], (features_list_sxdx[[id_pat]]$clust==i & features_list_sxdx[[id_pat]]$side==side))
+# image.plot(cov(tmp[,1:33]),axes=F, main = paste("Patient",id_pat, "Cluster",i, "Side", side)) 
+
+
+# Standardization:feature_pat_i_clu_j_scaled = (feature_pat_i_cluj- mean(feature_pat_i))/ sd(feature_pat_i) 
 for (side in c("left", "right")) {
   for (id_pat in 1:20) {
     z_max_left = max(map_dbl(var_sx_features_reduced[[id_pat]],max))
@@ -59,6 +69,7 @@ plot_from_indexes (cst_list, indexes_plot2$final_indexes)
 
 # Create plots variance intracluster 
 
+# Standardization: feature_pat_i_clu_j_scaled = (feature_pat_i_clu_j- mean(feature))/ sd(feature)
 var_sx = indexes_plot2$var_sx
 var_dx = indexes_plot2$var_dx
 
