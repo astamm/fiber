@@ -31,7 +31,7 @@ RD_info = list(4, c(21,31,37))
 FA_info = list(5, c(9,21,29,35))
 
 cst01_left_features = create_dataset_new (cst01$lhs, "left", MD_info = MD_info, RD_info = RD_info, AD_info=AD_info,
-                                           FA_info = FA_info, standardized = F) 
+                                           FA_info = FA_info, standardized = F)
 
 
 
@@ -66,14 +66,14 @@ load("cst19_features.RData")
 load("cst20_features.RData")
 
 
-features_list = list( cst01_features, 
-                      cst02_features, 
-                      cst03_features, 
-                      cst04_features, 
-                      cst05_features, 
+features_list = list( cst01_features,
+                      cst02_features,
+                      cst03_features,
+                      cst04_features,
+                      cst05_features,
                       cst06_features,
-                      cst07_features, 
-                      cst08_features, 
+                      cst07_features,
+                      cst08_features,
                       cst09_features,
                       cst10_features,
                       cst11_features,
@@ -86,6 +86,10 @@ features_list = list( cst01_features,
                       cst18_features,
                       cst19_features,
                       cst20_features)
+
+setwd("C:/Users/User/OneDrive - Politecnico di Milano/Project StatApp/RData")
+load("features_list.RData")
+
 select_left = function(features_pat) {
   return(features_pat$lhs)
 }
@@ -94,14 +98,13 @@ select_right = function(features_pat) {
 }
 
 features_left = map_dfr(features_list, select_left)
-mean_left = colMeans(features_left[,1:33])
-sd_left = apply(features_left[,1:33], 2, sd)
 features_right = map_df(features_list, select_right)
-mean_right = colMeans(features_right[,1:33])
-sd_right = apply(features_right[,1:33], 2, sd)
-setwd("/Users/ILARIASARTORI/Politecnico di Milano/Luca Torriani - Project StatApp/RData")
+features_huge = rbind(features_left,features_right)
 
-save(features_list, mean_left, sd_left, mean_right, sd_right, file = "features_list.RData")
-save(features_list, mean_left, sd_left, mean_right, sd_right, file = "features_list.RData")
+mean_tot = colMeans(features_huge[,1:33])
+sd_tot = apply(features_huge[,1:33], 2, sd)
+
+setwd("/Users/ILARIASARTORI/Politecnico di Milano/Luca Torriani - Project StatApp/RData")
+save(features_list, mean_tot, sd_tot, file = "features_list.RData")
 
 

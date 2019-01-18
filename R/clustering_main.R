@@ -8,11 +8,13 @@ library(dplyr)
 ################################### Load tracts ######################################
 ######################################################################################
 
+source("clustering_utils.R")
+
 setwd("/Users/ILARIASARTORI/Politecnico di Milano/Luca Torriani - Project StatApp/RData")
+setwd("C:/Users/User/OneDrive - Politecnico di Milano/Project StatApp/RData")
+
 load("cst_list.RData")
 
-source("~/Desktop/OneDrive - Politecnico di Milano/CST_atlas/Clustering/helper_cluster.R")
-source("/Users/ILARIASARTORI/Desktop/Poli/IVanno/CST_atlas/Clustering/helper_cluster.R")
 
 # For each patient, get the number of streamlines left+right sides
 num_streamline_patients = map_dbl (cst_list, num_of_streamline_patient)
@@ -60,10 +62,10 @@ plot(threshold_vec, k_opt_vec, pch = 19, xlab = "Threshold", ylab = "k_opt", mai
 lines(threshold_vec, k_opt_vec)
 
 ####  In data_first_points aggiungo la colonna con i cluster di appartenenza
-data_first_points = map(data_first_points, add_cluster_column, clusters = cluster_healthy, num_streamline_patients=num_streamline_patients)
+data_first_points = purrr::map(data_first_points, add_cluster_column, clusters = cluster_healthy, num_streamline_patients=num_streamline_patients)
 
 #### Riproietto il tratto sinistro nel piano delle x negative
-data_first_points = map(data_first_points, reproject_x)
+data_first_points = purrr::map(data_first_points, reproject_x)
 
 ################################################################################################
 ############################### Creo features_patients_9.RData ###############################
@@ -78,12 +80,12 @@ load("features_list.RData")
 
 # Lista di 20 elementi. Ogni elemento è un dataframe con le features delle varie streamline di quel paziente,
 # prima quelle sinistre e poi le destre
-features_list_sxdx = map (features_list, merge_left_right_features)
+features_list_sxdx = purrr::map (features_list, merge_left_right_features)
 
 # Aggiungo gli indici del cluster
-features_list_sxdx = map (features_list_sxdx, add_cluster_column, clusters = cluster_healthy, num_streamline_patients=num_streamline_patients)  # features_final
+features_list_sxdx = purrr::map (features_list_sxdx, add_cluster_column, clusters = cluster_healthy, num_streamline_patients=num_streamline_patients)  # features_final
 
-save (features_list_sxdx, mean_left, sd_left, mean_right, sd_right, file="features_patients_9.RData")
+save (features_list_sxdx, mean_tot, sd_tot,file="features_patients_9.RData")
 #######################################################################################
 
 
@@ -96,11 +98,11 @@ load("features_patients_9.RData")
 # Calcolo i centroidi
 features_reduced_tmp = purrr::map (features_list_sxdx, get_reduced_tot)
 
-features_reduced = map(features_reduced_tmp, extract_centroid) # Centroids
-var_sx_features_reduced = map(features_reduced_tmp, extract_var_sx)
-var_dx_features_reduced = map(features_reduced_tmp, extract_var_dx)
+features_reduced = purrr::map(features_reduced_tmp, extract_centroid) # Centroids
+# var_sx_features_reduced = map(features_reduced_tmp, extract_var_sx)
+# var_dx_features_reduced = map(features_reduced_tmp, extract_var_dx)
 
-save (features_reduced, var_sx_features_reduced, var_dx_features_reduced, file="features_patients_reduced_9.RData")
+save (features_reduced, file="features_patients_reduced_9.RData")
 
 
 

@@ -131,23 +131,21 @@ get_reduced_tot = function(features){
   fac_left = factor(features_left$clust)
   n_left = length(levels(fac_left))
   tmp_sx = apply(features_left[,1:33], 2, tapply, fac_left, mean)
-
-  tmp_var_sx = split(as.data.frame(scale(features_left[,1:33])), features_left$clust)
-  var_sx = map(tmp_var_sx, cov)
-
+  # tmp_var_sx = split(as.data.frame(scale(features_left[,1:33])), features_left$clust)
+  # var_sx = map(tmp_var_sx, cov)
+  #
   side_sx = rep("left", n_left)
   clust = levels(fac_left)
   patient =  rep(features_left$patient[1], n_left)
   centroids_left = data.frame(tmp_sx, side = side_sx, patient = patient,  clust = clust)
 
-  # right
+  # # right
   features_right = features[features$side == "right",]
   fac_right = factor(features_right$clust)
   n_right = length(levels(fac_right))
   tmp_dx = apply(features_right[,1:33], 2, tapply, fac_right, mean)
-
-  tmp_var_dx = split(as.data.frame(scale(features_right[,1:33])), features_right$clust)
-  var_dx = map(tmp_var_dx, cov)
+  # tmp_var_dx = split(as.data.frame(scale(features_right[,1:33])), features_right$clust)
+  # var_dx = map(tmp_var_dx, cov)
 
   side_dx = rep("right", n_right)
   clust = levels(fac_right)
@@ -156,7 +154,7 @@ get_reduced_tot = function(features){
 
   centroids = rbind(centroids_left, centroids_right)
   rownames(centroids) = 1:dim(centroids)[1]
-  return(list(centroids = as.data.frame(centroids), var_sx = var_sx, var_dx = var_dx))
+  return(list(centroids = as.data.frame(centroids)))
 }
 
 distance_from_centroid = function(features_row, centroid) {
@@ -164,6 +162,9 @@ distance_from_centroid = function(features_row, centroid) {
 }
 
 
+extract_centroid = function (data) {
+  return(data$centroid)
+}
 
 
 num_of_streamline_patient = function (cst) {
