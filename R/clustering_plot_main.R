@@ -107,7 +107,7 @@ library(plyr)
 
 df_big <- ldply (features_list_sxdx, data.frame)
 
-for(i in 1:6){
+for(i in 19:19){
   pdf(file = paste0(colnames(df)[i],".pdf", sep=""))
   par(mfrow = c(2,1))
 
@@ -115,6 +115,7 @@ for(i in 1:6){
   boxplot(df[,i])
   dev.off()
 }
+
 
 
 
